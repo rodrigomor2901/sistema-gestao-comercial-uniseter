@@ -990,7 +990,7 @@ async function ensureBaseAccessData() {
 }
 
 async function getLookups() {
-  const [lossReasons, cancelReasons, sellers] = await Promise.all([
+  const [lossReasons, cancelReasons, sellers, workflowStages] = await Promise.all([
     query("SELECT id, name FROM loss_reasons WHERE is_active = TRUE ORDER BY name ASC"),
     query("SELECT id, name FROM cancel_reasons WHERE is_active = TRUE ORDER BY name ASC"),
     query(
@@ -1001,6 +1001,12 @@ async function getLookups() {
        WHERE u.is_active = TRUE
          AND r.name IN ('vendedor', 'comercial_interno', 'gestor', 'diretoria', 'administrador')
        ORDER BY u.name ASC`
+    ),
+    query(
+      `SELECT code, name
+       FROM workflow_stages
+       WHERE is_active = TRUE
+       ORDER BY display_order ASC, name ASC`
     )
   ]);
 
@@ -1014,7 +1020,8 @@ async function getLookups() {
     serviceTypes: SERVICE_TYPE_OPTIONS,
     lossReasons: lossReasons.rows,
     cancelReasons: cancelReasons.rows,
-    sellers: sellers.rows
+    sellers: sellers.rows,
+    workflowStages: workflowStages.rows
   };
 }
 
@@ -1587,6 +1594,11 @@ async function listProposalNumbers(filters = {}, session) {
     proposalClauses.push(`COALESCE(pr.branch_name, '') = $${index}`);
   }
 
+  if (filters.stage) {
+    const index = proposalValues.push(filters.stage);
+    proposalClauses.push(`${buildProposalStageCodeSql("pr")} = $${index}`);
+  }
+
   const proposalResult = await query(
     `SELECT
        pr.id,
@@ -1655,6 +1667,11 @@ async function listProposalNumbers(filters = {}, session) {
   if (filters.branch) {
     const branchIndex = requestValues.push(filters.branch);
     requestClauses.push(`COALESCE(r.branch_name, '') = $${branchIndex}`);
+  }
+
+  if (filters.stage) {
+    const stageIndex = requestValues.push(filters.stage);
+    requestClauses.push(`ws.code = $${stageIndex}`);
   }
 
   if (filters.status) {
@@ -3975,7 +3992,8 @@ const server = http.createServer(async (request, response) => {
         search: url.searchParams.get("search"),
         manager: url.searchParams.get("manager"),
         status: url.searchParams.get("status"),
-        branch: url.searchParams.get("branch")
+        branch: url.searchParams.get("branch"),
+        stage: url.searchParams.get("stage")
       }, session);
       sendJson(response, 200, items);
       return;
@@ -4014,7 +4032,8 @@ const server = http.createServer(async (request, response) => {
         search: url.searchParams.get("search"),
         manager: url.searchParams.get("manager"),
         status: url.searchParams.get("status"),
-        branch: url.searchParams.get("branch")
+        branch: url.searchParams.get("branch"),
+        stage: url.searchParams.get("stage")
       }, session);
       sendCsv(response, "numeros-de-proposta.csv", buildProposalRegistryCsv(rows));
       return;

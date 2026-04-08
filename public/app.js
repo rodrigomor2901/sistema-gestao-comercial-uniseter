@@ -952,6 +952,7 @@ function applyLookups(lookups) {
   populateSimpleSelect("proposal-number-manager-name", lookups.responsibles || []);
   populateSimpleSelect("proposal-number-document-type", lookups.documentTypes || []);
   populateSimpleSelect("proposal-number-status", lookups.proposalStatuses || []);
+  populateSimpleSelect("proposal-number-stage-filter", lookups.workflowStages || [], "code", "name");
   populateSimpleSelect("proposal-number-industry-segment", lookups.industries || []);
   populateSimpleSelect("loss-reason", lookups.lossReasons || [], "name", "name");
   populateSimpleSelect("cancel-reason", lookups.cancelReasons || [], "name", "name");
@@ -1691,7 +1692,7 @@ async function refreshReports() {
 function buildProposalNumberQuery() {
   const form = new FormData(document.getElementById("proposal-number-filters"));
   const params = new URLSearchParams();
-  ["search", "manager", "status", "branch"].forEach((key) => {
+  ["search", "manager", "status", "stage", "branch"].forEach((key) => {
     const value = String(form.get(key) || "").trim();
     if (value) params.set(key, value);
   });
