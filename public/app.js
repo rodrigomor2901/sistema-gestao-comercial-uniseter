@@ -891,6 +891,7 @@ function resetAdminUserForm() {
   document.getElementById("admin-user-id").value = "";
   document.getElementById("admin-user-active").value = "true";
   document.getElementById("admin-user-password").value = "";
+  document.getElementById("admin-user-name").focus();
   const defaultRole = availableRoles[0]?.name || "vendedor";
   document.getElementById("admin-user-role").value = defaultRole;
   applyAdminModuleSelection(defaultModulesForRole(defaultRole));

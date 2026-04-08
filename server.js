@@ -2204,7 +2204,6 @@ async function listManagedUsers() {
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
-     WHERE u.is_active = TRUE
      GROUP BY u.id, u.name, u.email, u.department, u.is_active, u.module_access, u.must_change_password
      ORDER BY u.name ASC, u.email ASC`
   );
@@ -2222,20 +2221,51 @@ async function createManagedUser(payload, session) {
   }
 
   return withTransaction(async (client) => {
+    const normalizedEmail = String(payload.email || "").trim().toLowerCase();
     const temporaryPassword = String(payload.password || "").trim() || generateTemporaryPassword();
-    const userResult = await client.query(
-      `INSERT INTO users (name, email, department, is_active, password_hash, module_access, must_change_password)
-       VALUES ($1, $2, $3, $4, $5, $6::text[], TRUE)
-       RETURNING id`,
-      [
-        payload.name,
-        payload.email,
-        payload.department || null,
-        payload.isActive !== false,
-        hashPassword(temporaryPassword),
-        normalizeModuleAccess(payload.moduleAccess, payload.role)
-      ]
-    );
+    let userResult;
+    try {
+      userResult = await client.query(
+        `INSERT INTO users (name, email, department, is_active, password_hash, module_access, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, $6::text[], TRUE)
+         RETURNING id`,
+        [
+          payload.name,
+          normalizedEmail,
+          payload.department || null,
+          payload.isActive !== false,
+          hashPassword(temporaryPassword),
+          normalizeModuleAccess(payload.moduleAccess, payload.role)
+        ]
+        );
+      } catch (error) {
+        if (error?.code === "23505") {
+          const existingResult = await client.query(
+            `SELECT
+               id,
+               name,
+               email,
+               is_active AS "isActive"
+               FROM users
+              WHERE LOWER(email) = LOWER($1)
+              LIMIT 1`,
+            [normalizedEmail]
+          );
+          const existing = existingResult.rows[0];
+          if (existing && existing.isActive === false) {
+            throw new Error(
+              `Ja existe um usuario inativo com este e-mail: ${existing.name || existing.email}. Reative ou edite o cadastro existente.`
+            );
+          }
+          if (existing) {
+            throw new Error(
+              `Ja existe um usuario ativo com este e-mail: ${existing.name || existing.email}. Edite o cadastro existente em vez de criar outro.`
+            );
+          }
+          throw new Error("Ja existe um usuario cadastrado com este e-mail.");
+        }
+        throw error;
+      }
 
     const roleResult = await client.query("SELECT id FROM roles WHERE name = $1", [payload.role]);
     if (!roleResult.rows[0]) {
@@ -2252,7 +2282,7 @@ async function createManagedUser(payload, session) {
       targetUserId: userResult.rows[0].id,
       description: `Usuário ${payload.email} criado com perfil ${payload.role}.`,
       metadata: {
-        email: payload.email,
+        email: normalizedEmail,
         role: payload.role,
         department: payload.department || null,
         isActive: payload.isActive !== false,
@@ -2273,32 +2303,40 @@ async function updateManagedUser(userId, payload, session) {
   }
 
   return withTransaction(async (client) => {
+    const normalizedEmail = String(payload.email || "").trim().toLowerCase();
     const roleResult = await client.query("SELECT id FROM roles WHERE name = $1", [payload.role]);
     if (!roleResult.rows[0]) {
       throw new Error("Perfil informado nao encontrado.");
     }
 
-    await client.query(
-      `UPDATE users
-       SET name = $2,
-           email = $3,
-           department = $4,
-           is_active = $5,
-           password_hash = COALESCE($6, password_hash),
-           module_access = $7::text[],
-           must_change_password = CASE WHEN $6 IS NOT NULL THEN TRUE ELSE must_change_password END,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [
-        userId,
-        payload.name,
-        payload.email,
-        payload.department || null,
-        payload.isActive !== false,
-        payload.password ? hashPassword(payload.password) : null,
-        normalizeModuleAccess(payload.moduleAccess, payload.role)
-      ]
-    );
+    try {
+      await client.query(
+        `UPDATE users
+         SET name = $2,
+             email = $3,
+             department = $4,
+             is_active = $5,
+             password_hash = COALESCE($6, password_hash),
+             module_access = $7::text[],
+             must_change_password = CASE WHEN $6 IS NOT NULL THEN TRUE ELSE must_change_password END,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [
+          userId,
+          payload.name,
+          normalizedEmail,
+          payload.department || null,
+          payload.isActive !== false,
+          payload.password ? hashPassword(payload.password) : null,
+          normalizeModuleAccess(payload.moduleAccess, payload.role)
+        ]
+      );
+    } catch (error) {
+      if (error?.code === "23505") {
+        throw new Error("Ja existe outro usuario cadastrado com este e-mail.");
+      }
+      throw error;
+    }
 
     await client.query("DELETE FROM user_roles WHERE user_id = $1", [userId]);
     await ensureUserRole(client, userId, roleResult.rows[0].id);
@@ -2310,7 +2348,7 @@ async function updateManagedUser(userId, payload, session) {
       targetUserId: userId,
       description: `Usuário ${payload.email} atualizado para o perfil ${payload.role}.`,
       metadata: {
-        email: payload.email,
+        email: normalizedEmail,
         role: payload.role,
         department: payload.department || null,
         isActive: payload.isActive !== false,
