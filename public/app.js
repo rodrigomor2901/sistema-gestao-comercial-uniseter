@@ -655,6 +655,76 @@ function renderProposalNumberMetrics(allItems, filteredItems) {
   `).join("");
 }
 
+function renderProposalNumbers(items) {
+  const container = document.getElementById("proposal-number-table");
+  const summary = document.getElementById("proposal-numbers-summary");
+  const proposalItems = items.filter((item) => item.sourceType !== "request");
+  const importedCount = proposalItems.filter((item) => item.importedFromLegacy).length;
+  const latest = proposalItems[0]?.proposalNumberDisplay || "-";
+  summary.textContent = `${items.length} registro(s) | ultimo numero: ${latest} | historico: ${importedCount}`;
+
+  if (!items.length) {
+    container.innerHTML = `
+      <tr>
+        <td colspan="11" class="muted">Nenhum numero de proposta encontrado.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  container.innerHTML = items.map((item) => `
+    <tr class="proposal-history-row${item.sourceType === "request" ? " proposal-request-row" : ""}" ${item.id ? `data-proposal-id="${item.id}"` : ""} ${item.requestId ? `data-request-id="${item.requestId}"` : ""}>
+      <td>${item.proposalNumberDisplay}</td>
+      <td>${item.issueDate || "-"}</td>
+      <td>${item.manager || "-"}</td>
+      <td>${item.clientName || "-"}</td>
+      <td>${item.requestNumber || "-"}</td>
+      <td>${item.stageLabel || "Em negociacao"}</td>
+      <td>${item.documentType || "-"}</td>
+      <td>${item.branchName || "-"}</td>
+      <td>${item.status || "-"}</td>
+      <td>${item.proposalValue || "-"}</td>
+      <td>
+        <div class="table-action-group">
+          ${item.id && item.uploadedFileName ? `<a class="attachment-link" href="/api/proposal-numbers/${item.id}/download?${sessionQueryString()}" target="_blank" rel="noopener noreferrer">Baixar</a>` : `<span class="muted">-</span>`}
+          ${item.sourceType === "request"
+            ? `<button type="button" class="table-action proposal-generate-button" data-request-id="${item.requestId}">Gerar numero</button>`
+            : `<button type="button" class="table-action proposal-edit-button" data-proposal-id="${item.id}">Editar</button>`}
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function renderProposalNumberMetrics(allItems, filteredItems) {
+  const container = document.getElementById("proposal-number-metrics");
+  const proposalAllItems = allItems.filter((item) => item.sourceType !== "request");
+  const proposalFilteredItems = filteredItems.filter((item) => item.sourceType !== "request");
+  const currentMonth = new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
+  const currentMonthCount = proposalAllItems.filter((item) => String(item.issueDate || "").slice(3) === currentMonth).length;
+  const totalValue = proposalAllItems.reduce((sum, item) => sum + Number(item.proposalValueRaw || 0), 0);
+  const filteredValue = proposalFilteredItems.reduce((sum, item) => sum + Number(item.proposalValueRaw || 0), 0);
+  const bdiItems = proposalAllItems.filter((item) => item.bdiRaw !== null && item.bdiRaw !== undefined && item.bdiRaw !== "");
+  const avgBdi = bdiItems.length
+    ? (bdiItems.reduce((sum, item) => sum + Number(item.bdiRaw || 0), 0) / bdiItems.length) * 100
+    : 0;
+
+  const cards = [
+    { label: "Total de propostas", value: String(proposalAllItems.length), note: `${currentMonthCount} neste mes`, tone: "info" },
+    { label: "Volume total", value: formatCurrency(totalValue), note: "historico completo", tone: "ok" },
+    { label: "Margem media", value: `${avgBdi.toFixed(1).replace(".", ",")}%`, note: "BDI medio geral", tone: "warn" },
+    { label: "Filtro atual", value: String(filteredItems.length), note: proposalFilteredItems.length ? formatCurrency(filteredValue) : "sem filtros aplicados", tone: "info" }
+  ];
+
+  container.innerHTML = cards.map((metric) => `
+    <div class="card metric proposal-metric">
+      <div class="label">${metric.label}</div>
+      <div class="value">${metric.value}</div>
+      <span class="tag ${metric.tone}">${metric.note}</span>
+    </div>
+  `).join("");
+}
+
 function renderCrmProposalRequests(items) {
   const container = document.getElementById("proposal-crm-request-table");
   const summary = document.getElementById("proposal-crm-summary");
@@ -2236,6 +2306,26 @@ async function bootstrap() {
     } catch (error) {
       alert(`Nao foi possivel carregar o numero da proposta: ${error.message}`);
     }
+  });
+
+  document.getElementById("proposal-number-table").addEventListener("click", async (event) => {
+    const generateButton = event.target.closest(".proposal-generate-button");
+    if (!generateButton) return;
+
+    const selected = crmProposalRequestsCache.find((item) => String(item.id) === String(generateButton.dataset.requestId));
+    if (!selected) {
+      alert("Nao foi possivel localizar a solicitacao para gerar o numero da proposta.");
+      return;
+    }
+
+    try {
+      await selectRequest(selected.id);
+    } catch (error) {
+      // Keep prefill flow available even if request detail partially fails.
+    }
+    prefillProposalNumberFromCrmRequest(selected);
+    setActiveView("proposta_crm");
+    document.getElementById("proposal-number-form-section").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   document.getElementById("sales-closing-list").addEventListener("click", async (event) => {

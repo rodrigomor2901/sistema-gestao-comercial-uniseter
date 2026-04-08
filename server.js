@@ -1558,14 +1558,14 @@ async function getReports(filters = {}) {
 }
 
 async function listProposalNumbers(filters = {}, session) {
-  const clauses = [];
-  const values = [];
+  const proposalClauses = [];
+  const proposalValues = [];
 
-  clauses.push(buildProposalNumberAccessClause(session, values));
+  proposalClauses.push(buildProposalNumberAccessClause(session, proposalValues));
 
   if (filters.search) {
-    const index = values.push(`%${filters.search}%`);
-    clauses.push(`(
+    const index = proposalValues.push(`%${filters.search}%`);
+    proposalClauses.push(`(
       pr.proposal_number_display ILIKE $${index}
       OR COALESCE(c.legal_name, pr.client_name, '') ILIKE $${index}
       OR COALESCE(req.request_number, pr.crm_request_number, '') ILIKE $${index}
@@ -1573,23 +1573,24 @@ async function listProposalNumbers(filters = {}, session) {
   }
 
   if (filters.manager) {
-    const index = values.push(`%${filters.manager}%`);
-    clauses.push(`COALESCE(pr.manager_name, '') ILIKE $${index}`);
+    const index = proposalValues.push(`%${filters.manager}%`);
+    proposalClauses.push(`COALESCE(pr.manager_name, '') ILIKE $${index}`);
   }
 
   if (filters.status) {
-    const index = values.push(filters.status);
-    clauses.push(`COALESCE(pr.negotiation_status, '') = $${index}`);
+    const index = proposalValues.push(filters.status);
+    proposalClauses.push(`COALESCE(pr.negotiation_status, '') = $${index}`);
   }
 
   if (filters.branch) {
-    const index = values.push(filters.branch);
-    clauses.push(`COALESCE(pr.branch_name, '') = $${index}`);
+    const index = proposalValues.push(filters.branch);
+    proposalClauses.push(`COALESCE(pr.branch_name, '') = $${index}`);
   }
 
-  const result = await query(
+  const proposalResult = await query(
     `SELECT
        pr.id,
+       'proposal' AS "sourceType",
        pr.proposal_sequence AS "proposalSequence",
        pr.proposal_number_display AS "proposalNumberDisplay",
        TO_CHAR(pr.issue_date, 'DD/MM/YYYY') AS "issueDate",
@@ -1612,12 +1613,12 @@ async function listProposalNumbers(filters = {}, session) {
      LEFT JOIN requests req ON req.id = pr.request_id
      LEFT JOIN clients c ON c.id = req.client_id
      LEFT JOIN users seller_user ON seller_user.id = pr.seller_user_id
-     WHERE ${clauses.join(" AND ")}
+     WHERE ${proposalClauses.join(" AND ")}
      ORDER BY pr.proposal_sequence DESC, pr.id DESC`,
-    values
+    proposalValues
   );
 
-  return result.rows.map((row) => ({
+  const proposalRows = proposalResult.rows.map((row) => ({
     ...row,
     proposalValue: row.proposalValue === null || row.proposalValue === undefined
       ? "-"
@@ -1628,6 +1629,104 @@ async function listProposalNumbers(filters = {}, session) {
     branchName: row.branchName || "-",
     requestNumber: row.requestNumber || "-"
   }));
+
+  const requestValues = [];
+  const requestClauses = ["linked_proposal.id IS NULL"];
+
+  if (!hasPermission(session, "readAllRequests")) {
+    const emailIndex = requestValues.push(session.email || "");
+    requestClauses.push(`LOWER(seller_user.email) = LOWER($${emailIndex})`);
+  }
+
+  if (filters.search) {
+    const searchIndex = requestValues.push(`%${filters.search}%`);
+    requestClauses.push(`(
+      r.request_number ILIKE $${searchIndex}
+      OR COALESCE(c.legal_name, '') ILIKE $${searchIndex}
+      OR COALESCE(c.trade_name, '') ILIKE $${searchIndex}
+    )`);
+  }
+
+  if (filters.manager) {
+    const managerIndex = requestValues.push(`%${filters.manager}%`);
+    requestClauses.push(`COALESCE(seller_user.name, '') ILIKE $${managerIndex}`);
+  }
+
+  if (filters.branch) {
+    const branchIndex = requestValues.push(filters.branch);
+    requestClauses.push(`COALESCE(r.branch_name, '') = $${branchIndex}`);
+  }
+
+  if (filters.status) {
+    if (filters.status === "Sem numero") {
+      // Keep all request-only rows visible when explicitly filtering by missing proposal number.
+    } else {
+      requestClauses.push("FALSE");
+    }
+  }
+
+  const requestResult = await query(
+    `SELECT
+       NULL::bigint AS id,
+       'request' AS "sourceType",
+       NULL::integer AS "proposalSequence",
+       '-'::text AS "proposalNumberDisplay",
+       TO_CHAR(r.request_date, 'DD/MM/YYYY') AS "issueDate",
+       seller_user.name AS manager,
+       UPPER(c.legal_name) AS "clientName",
+       r.request_number AS "requestNumber",
+       ws.code AS "stageCode",
+       ws.name AS "stageLabel",
+       '-'::text AS "documentType",
+       COALESCE(r.branch_name, '-') AS "branchName",
+       'Sem numero'::text AS status,
+       NULL::numeric AS "proposalValue",
+       NULL::numeric AS bdi,
+       NULL::text AS "probabilityLevel",
+       FALSE AS "importedFromLegacy",
+       NULL::text AS "uploadedFileName",
+       seller_user.email AS "sellerEmail",
+       r.id AS "requestId"
+     FROM requests r
+     JOIN clients c ON c.id = r.client_id
+     JOIN users seller_user ON seller_user.id = r.seller_user_id
+     JOIN workflow_stages ws ON ws.id = r.current_stage_id
+     LEFT JOIN LATERAL (
+       SELECT id
+       FROM proposal_registry
+       WHERE request_id = r.id
+       ORDER BY id DESC
+       LIMIT 1
+     ) linked_proposal ON TRUE
+     WHERE ${requestClauses.join(" AND ")}
+     ORDER BY r.request_date DESC, r.id DESC`,
+    requestValues
+  );
+
+  const requestRows = requestResult.rows.map((row) => ({
+    ...row,
+    proposalValue: "-",
+    proposalValueRaw: 0,
+    bdiRaw: null,
+    branchName: row.branchName || "-",
+    requestNumber: row.requestNumber || "-"
+  }));
+
+  return [...proposalRows, ...requestRows].sort((left, right) => {
+    if (left.sourceType !== right.sourceType) {
+      return left.sourceType === "proposal" ? -1 : 1;
+    }
+
+    const leftSequence = Number(left.proposalSequence || 0);
+    const rightSequence = Number(right.proposalSequence || 0);
+    if (leftSequence !== rightSequence) {
+      return rightSequence - leftSequence;
+    }
+
+    const leftRequestNumber = String(left.requestNumber || "");
+    const rightRequestNumber = String(right.requestNumber || "");
+    return rightRequestNumber.localeCompare(leftRequestNumber, "pt-BR", { numeric: true, sensitivity: "base" });
+  });
 }
 
 async function listCrmRequestsWithoutProposal(filters = {}, session) {
