@@ -765,7 +765,8 @@ async function ensureProposalRegistryColumns() {
 async function ensureWorkflowStageColumns() {
   await query(`
     ALTER TABLE workflow_stages
-    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0
   `);
 }
 
