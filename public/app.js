@@ -891,7 +891,9 @@ function resetAdminUserForm() {
   document.getElementById("admin-user-id").value = "";
   document.getElementById("admin-user-active").value = "true";
   document.getElementById("admin-user-password").value = "";
-  applyAdminModuleSelection(defaultModulesForRole(document.getElementById("admin-user-role").value || "vendedor"));
+  const defaultRole = availableRoles[0]?.name || "vendedor";
+  document.getElementById("admin-user-role").value = defaultRole;
+  applyAdminModuleSelection(defaultModulesForRole(defaultRole));
 }
 
 function populateAdminUserForm(user) {
@@ -2554,14 +2556,24 @@ async function bootstrap() {
     const userId = document.getElementById("admin-user-id").value;
     const passwordValue = document.getElementById("admin-user-password").value.trim();
     const payload = {
-      name: document.getElementById("admin-user-name").value,
-      email: document.getElementById("admin-user-email").value,
-      department: document.getElementById("admin-user-department").value,
-      role: document.getElementById("admin-user-role").value,
+      name: document.getElementById("admin-user-name").value.trim(),
+      email: document.getElementById("admin-user-email").value.trim(),
+      department: document.getElementById("admin-user-department").value.trim(),
+      role: document.getElementById("admin-user-role").value.trim(),
       isActive: document.getElementById("admin-user-active").value === "true",
       moduleAccess: [...document.querySelectorAll('input[name="moduleAccess"]:checked')].map((input) => input.value),
       password: passwordValue || undefined
     };
+
+    if (!payload.name || !payload.email || !payload.role) {
+      alert("Preencha nome, e-mail e perfil do usuário.");
+      return;
+    }
+
+    if (!userId && !passwordValue) {
+      alert("Informe uma senha provisória para criar o novo usuário.");
+      return;
+    }
 
     try {
       const response = await fetchWithSession(userId ? `/api/admin/users/${userId}` : "/api/admin/users", {
