@@ -139,6 +139,7 @@ function assertAdmin(session) {
 const ROLE_PERMISSIONS = {
   vendedor: {
     createRequest: true,
+    deleteRequest: true,
     createProposalNumber: true,
     saveProposal: false,
     saveCommercial: true,
@@ -149,6 +150,7 @@ const ROLE_PERMISSIONS = {
   },
   comercial_interno: {
     createRequest: true,
+    deleteRequest: true,
     createProposalNumber: true,
     saveProposal: true,
     saveCommercial: true,
@@ -159,6 +161,7 @@ const ROLE_PERMISSIONS = {
   },
   propostas: {
     createRequest: false,
+    deleteRequest: false,
     createProposalNumber: true,
     saveProposal: true,
     saveCommercial: false,
@@ -169,6 +172,7 @@ const ROLE_PERMISSIONS = {
   },
   juridico: {
     createRequest: false,
+    deleteRequest: false,
     createProposalNumber: false,
     saveProposal: false,
     saveCommercial: false,
@@ -179,6 +183,7 @@ const ROLE_PERMISSIONS = {
   },
   gestor: {
     createRequest: false,
+    deleteRequest: false,
     createProposalNumber: false,
     saveProposal: false,
     saveCommercial: false,
@@ -189,6 +194,7 @@ const ROLE_PERMISSIONS = {
   },
   diretoria: {
     createRequest: false,
+    deleteRequest: false,
     createProposalNumber: false,
     saveProposal: false,
     saveCommercial: false,
@@ -199,6 +205,7 @@ const ROLE_PERMISSIONS = {
   },
   administrador: {
     createRequest: true,
+    deleteRequest: true,
     createProposalNumber: true,
     saveProposal: true,
     saveCommercial: true,
@@ -1357,6 +1364,91 @@ async function createRequest(payload, session) {
     return {
       id: requestId,
       requestNumber: requestResult.rows[0].request_number
+    };
+  });
+}
+
+async function deleteRequest(requestId, session) {
+  return withTransaction(async (client) => {
+    const requestResult = await client.query(
+      "SELECT id, request_number, client_id FROM requests WHERE id = $1",
+      [requestId]
+    );
+
+    if (!requestResult.rows[0]) {
+      const error = new Error("Solicitacao nao encontrada.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const linkedProposal = await client.query(
+      `SELECT proposal_number_display
+       FROM proposal_registry
+       WHERE request_id = $1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [requestId]
+    );
+
+    if (linkedProposal.rows[0]) {
+      const error = new Error(
+        `Esta solicitacao possui numero de proposta vinculado (${linkedProposal.rows[0].proposal_number_display}). Exclua ou desvincule o numero de proposta antes.`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const attachmentResult = await client.query(
+      "SELECT storage_path FROM attachments WHERE request_id = $1",
+      [requestId]
+    );
+
+    await client.query("DELETE FROM attachments WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM contract_records WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM commercial_records WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM proposal_records WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM request_pending_info WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM request_stage_history WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM request_equipments WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM request_posts WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM request_benefits WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM request_services WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM requests WHERE id = $1", [requestId]);
+
+    const clientId = requestResult.rows[0].client_id;
+    if (clientId) {
+      const remainingRequests = await client.query(
+        "SELECT 1 FROM requests WHERE client_id = $1 LIMIT 1",
+        [clientId]
+      );
+      if (!remainingRequests.rows[0]) {
+        await client.query("DELETE FROM client_contacts WHERE client_id = $1", [clientId]);
+        await client.query("DELETE FROM clients WHERE id = $1", [clientId]);
+      }
+    }
+
+    await logAuditEntry(client, {
+      actor: {
+        userId: session?.userId || null,
+        name: session?.name || "Usuario",
+        email: session?.email || "",
+        role: session?.role || ""
+      },
+      actionType: "request_deleted",
+      entityType: "request",
+      entityId: requestId,
+      requestId,
+      description: `Solicitacao ${requestResult.rows[0].request_number} excluida.`,
+      metadata: {
+        requestNumber: requestResult.rows[0].request_number
+      }
+    });
+
+    return {
+      requestNumber: requestResult.rows[0].request_number,
+      attachmentPaths: attachmentResult.rows
+        .map((row) => row.storage_path)
+        .filter(Boolean)
     };
   });
 }
@@ -4000,6 +4092,30 @@ const server = http.createServer(async (request, response) => {
         message: "Solicitacao salva com sucesso.",
         request: created,
         requestNumber: created.requestNumber
+      });
+      return;
+    }
+
+    if (request.method === "DELETE" && /^\/api\/requests\/\d+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertPermission(session, "deleteRequest", "Seu perfil nao pode excluir solicitacoes.");
+      const requestId = Number(url.pathname.split("/").pop());
+      const removed = await deleteRequest(requestId, session);
+      for (const storagePath of removed.attachmentPaths) {
+        try {
+          const resolvedPath = path.isAbsolute(storagePath)
+            ? storagePath
+            : path.resolve(storagePath);
+          if (fs.existsSync(resolvedPath)) {
+            fs.unlinkSync(resolvedPath);
+          }
+        } catch (error) {
+          console.warn("Nao foi possivel remover anexo da solicitacao excluida:", error.message);
+        }
+      }
+      sendJson(response, 200, {
+        message: `Solicitacao ${removed.requestNumber} excluida com sucesso.`
       });
       return;
     }

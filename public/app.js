@@ -106,6 +106,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "negociacoes", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: true,
+      deleteRequest: true,
       createProposalNumber: true,
       saveProposal: false,
       saveCommercial: true,
@@ -119,6 +120,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "propostas", "negociacoes", "contratos", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: true,
+      deleteRequest: true,
       createProposalNumber: true,
       saveProposal: true,
       saveCommercial: true,
@@ -132,6 +134,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "propostas", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: false,
+      deleteRequest: false,
       createProposalNumber: true,
       saveProposal: true,
       saveCommercial: false,
@@ -145,6 +148,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "contratos", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: false,
+      deleteRequest: false,
       createProposalNumber: false,
       saveProposal: false,
       saveCommercial: false,
@@ -158,6 +162,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "propostas", "negociacoes", "contratos", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: false,
+      deleteRequest: false,
       createProposalNumber: false,
       saveProposal: false,
       saveCommercial: false,
@@ -171,6 +176,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "propostas", "negociacoes", "contratos", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: false,
+      deleteRequest: false,
       createProposalNumber: false,
       saveProposal: false,
       saveCommercial: false,
@@ -184,6 +190,7 @@ const ROLE_CONFIG = {
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "propostas", "negociacoes", "contratos", "relatorios", "alterar_senha", "admin_users"],
     permissions: {
       createRequest: true,
+      deleteRequest: true,
       createProposalNumber: true,
       saveProposal: true,
       saveCommercial: true,
@@ -897,6 +904,13 @@ function resetAdminUserForm() {
   applyAdminModuleSelection(defaultModulesForRole(defaultRole));
 }
 
+function updateRequestDeleteButton(requestId) {
+  const button = document.getElementById("delete-request-button");
+  if (!button) return;
+  const allowed = Boolean(requestId && rolePermissions(currentRole).deleteRequest);
+  button.style.display = allowed ? "inline-flex" : "none";
+}
+
 function populateAdminUserForm(user) {
   document.getElementById("admin-user-id").value = user.id || "";
   document.getElementById("admin-user-name").value = user.name || "";
@@ -1139,6 +1153,7 @@ function formatIsoDateToBr(value) {
 
 function renderProposalOnlyContext(detail) {
   selectedRequestId = null;
+  updateRequestDeleteButton(null);
   document.getElementById("commercial-request-id").value = "";
   document.getElementById("contract-request-id").value = "";
 
@@ -1797,6 +1812,53 @@ function setupRequestForm() {
     setActiveView("solicitacoes");
     document.getElementById("request-form-section").scrollIntoView({ behavior: "smooth", block: "start" });
   });
+  document.getElementById("delete-request-button").addEventListener("click", async () => {
+    if (!selectedRequestId) {
+      alert("Selecione uma solicitacao para excluir.");
+      return;
+    }
+
+    const confirmed = window.confirm("Deseja excluir esta solicitacao? Esta acao nao pode ser desfeita.");
+    if (!confirmed) return;
+
+    try {
+      const response = await fetchWithSession(`/api/requests/${selectedRequestId}`, {
+        method: "DELETE"
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Falha ao excluir solicitacao.");
+      }
+
+      const [requests, reportItems] = await Promise.all([
+        refreshRequestsTable(),
+        refreshReports()
+      ]);
+
+      reportRowsCache = reportItems;
+      renderAllStageBoards(reportRowsCache);
+      await refreshDashboard();
+
+      if (requests.length) {
+        await selectRequest(requests[0].id);
+      } else {
+        selectedRequestId = null;
+        updateRequestDeleteButton(null);
+        renderDetail(requestDetailFallback());
+        renderHistory([]);
+        renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
+        renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_aceite"]);
+        populateProposalForm(requestDetailFallback());
+        populateCommercialForm(requestDetailFallback());
+        populateContractForm(requestDetailFallback());
+        populateProposalNumberLinkedRequest(null);
+      }
+
+      alert(result.message || "Solicitacao excluida com sucesso.");
+    } catch (error) {
+      alert(`Nao foi possivel excluir a solicitacao: ${error.message}`);
+    }
+  });
   document.getElementById("clear-report-filters").addEventListener("click", async () => {
     resetReportFilters();
     reportRowsCache = await refreshReports();
@@ -2009,6 +2071,7 @@ async function loadAuthenticatedAppData() {
   proposalNumberAllRowsCache = proposalNumbers;
   crmProposalRequestsCache = crmProposalRequests;
   selectedRequestId = requests[0]?.id || null;
+  updateRequestDeleteButton(selectedRequestId);
 
   renderMetrics(dashboard.metrics);
   renderFunnel(dashboard.funnel);
@@ -2037,6 +2100,7 @@ async function loadAuthenticatedAppData() {
 
 async function selectRequest(requestId) {
   selectedRequestId = Number(requestId);
+  updateRequestDeleteButton(selectedRequestId);
   const detail = await loadJson(`/api/requests/${requestId}`);
   const attachments = await loadRequestAttachments(requestId);
   renderDetail(detail);
