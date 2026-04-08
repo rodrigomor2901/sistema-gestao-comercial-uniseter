@@ -2589,7 +2589,10 @@ async function bootstrap() {
       await loadAdminModule();
       await loadAuthenticatedAppData();
       resetAdminUserForm();
-      alert(result.message || "Usuário salvo com sucesso.");
+      const successMessage = result.temporaryPassword
+        ? `${result.message || "Usuário salvo com sucesso."}\nSenha provisória: ${result.temporaryPassword}`
+        : (result.message || "Usuário salvo com sucesso.");
+      alert(successMessage);
     } catch (error) {
       alert(`Não foi possível salvar o usuário: ${error.message}`);
     }

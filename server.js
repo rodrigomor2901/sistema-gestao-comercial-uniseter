@@ -303,6 +303,10 @@ function hashPassword(password) {
   return `${salt}:${hash}`;
 }
 
+function generateTemporaryPassword() {
+  return `Temp${Math.random().toString(36).slice(2, 8)}!`;
+}
+
 function verifyPassword(password, storedHash) {
   if (!password || !storedHash || !storedHash.includes(":")) return false;
   const [salt, originalHash] = storedHash.split(":");
@@ -2213,11 +2217,12 @@ async function listManagedUsers() {
 }
 
 async function createManagedUser(payload, session) {
-  if (!payload.name || !payload.email || !payload.role || !payload.password) {
-    throw new Error("Nome, email, perfil e senha sao obrigatorios.");
+  if (!payload.name || !payload.email || !payload.role) {
+    throw new Error("Nome, email e perfil sao obrigatorios.");
   }
 
   return withTransaction(async (client) => {
+    const temporaryPassword = String(payload.password || "").trim() || generateTemporaryPassword();
     const userResult = await client.query(
       `INSERT INTO users (name, email, department, is_active, password_hash, module_access, must_change_password)
        VALUES ($1, $2, $3, $4, $5, $6::text[], TRUE)
@@ -2227,7 +2232,7 @@ async function createManagedUser(payload, session) {
         payload.email,
         payload.department || null,
         payload.isActive !== false,
-        hashPassword(payload.password),
+        hashPassword(temporaryPassword),
         normalizeModuleAccess(payload.moduleAccess, payload.role)
       ]
     );
@@ -2251,10 +2256,14 @@ async function createManagedUser(payload, session) {
         role: payload.role,
         department: payload.department || null,
         isActive: payload.isActive !== false,
-        moduleAccess: normalizeModuleAccess(payload.moduleAccess, payload.role)
+        moduleAccess: normalizeModuleAccess(payload.moduleAccess, payload.role),
+        mustChangePassword: true
       }
     });
-    return userResult.rows[0];
+    return {
+      ...userResult.rows[0],
+      temporaryPassword
+    };
   });
 }
 
