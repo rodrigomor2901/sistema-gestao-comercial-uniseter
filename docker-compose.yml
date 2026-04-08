@@ -1,0 +1,52 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sistema-gestao-comercial-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3100
+      APP_BASE_URL: http://localhost:3100
+      APP_UPLOADS_DIR: /app/uploads
+      SESSION_TTL_HOURS: 12
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: crm_propostas
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGPOOL_MAX: 20
+      PG_IDLE_TIMEOUT_MS: 30000
+      PG_CONNECT_TIMEOUT_MS: 10000
+    ports:
+      - "3100:3100"
+    volumes:
+      - uploads_data:/app/uploads
+
+  db:
+    image: postgres:17-alpine
+    container_name: sistema-gestao-comercial-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crm_propostas
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../schema-crm-propostas.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d crm_propostas"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  uploads_data:

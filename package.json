@@ -1,0 +1,16 @@
+{
+  "name": "crm-propostas-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Estrutura inicial do CRM de propostas",
+  "scripts": {
+    "start": "node server.js",
+    "start:prod": "node server.js",
+    "import:proposal-history": "node scripts/import-proposal-history.js",
+    "import:sales-pipeline": "node scripts/import-sales-pipeline.js",
+    "run:sql": "node scripts/run-sql-file.js"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
+  }
+}

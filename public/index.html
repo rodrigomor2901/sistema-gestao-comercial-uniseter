@@ -1,0 +1,1550 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sistema de Gestão Comercial</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <section id="login-screen" class="login-screen">
+    <div class="login-panel">
+      <img src="/unisetter-logo-white-transparent.png" alt="Grupo Uniseter" class="login-screen-logo" />
+      <div class="login-title">Gestão Comercial - Uniseter</div>
+      <form id="login-form" class="login-form">
+        <div class="control">
+          <label for="login-email">Email</label>
+          <input id="login-email" name="email" type="email" autocomplete="username" />
+        </div>
+        <div class="control">
+          <label for="login-password">Senha</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="primary login-submit">Entrar</button>
+        <div id="login-feedback" class="muted"></div>
+      </form>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app app-hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="/unisetter-logo.png" alt="Grupo Uniseter" class="brand-logo" />
+        <strong>Sistema de Gestão Comercial</strong>
+        <span>Grupo Uniseter | Base inicial da aplicação</span>
+      </div>
+
+      <div class="session-card">
+        <div class="nav-title">Sessão atual</div>
+        <div class="session-user" id="session-user-name">-</div>
+        <div class="session-email" id="session-user-email">-</div>
+        <div class="session-role" id="session-user-role">-</div>
+        <div id="profile-note" class="muted profile-note"></div>
+        <button type="button" class="secondary logout-button" id="logout-button">Sair</button>
+      </div>
+
+      <div class="module-nav-group" data-module-nav="proposta">
+        <div class="nav-title">Módulo número de proposta</div>
+        <nav class="nav module-nav">
+          <a href="#" data-view-link="proposta_todas">Todas as propostas</a>
+          <a href="#" data-view-link="proposta_crm">Requisições CRM</a>
+        </nav>
+      </div>
+
+      <div class="module-nav-group" data-module-nav="crm">
+        <div class="nav-title">Módulo CRM</div>
+        <nav class="nav module-nav">
+          <a href="#" class="active" data-view-link="dashboard">Dashboard</a>
+          <a href="#" data-view-link="funil_vendas">Funil de vendas</a>
+          <a href="#" data-view-link="solicitacoes">Solicitações</a>
+          <a href="#" data-view-link="propostas">Fila de propostas</a>
+          <a href="#" data-view-link="negociacoes">Negociações</a>
+          <a href="#" data-view-link="contratos">Contratos</a>
+          <a href="#" data-view-link="relatorios">Relatórios</a>
+        </nav>
+      </div>
+
+      <div class="module-nav-group" data-module-nav="admin">
+        <div class="nav-title">Módulo administrador</div>
+        <nav class="nav module-nav">
+          <a href="#" data-view-link="admin_users">Administrar usuários</a>
+          <a href="#" data-view-link="alterar_senha">Alterar senha</a>
+        </nav>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <h1 id="page-title">Dashboard</h1>
+          <p id="page-subtitle">Painel operacional do funil de propostas com workflow, SLA e anexos.</p>
+        </div>
+        <div class="button-row">
+          <button class="secondary" id="top-export-report">Exportar Excel</button>
+          <button class="primary" id="go-to-request-form">Nova solicitação</button>
+        </div>
+      </section>
+
+      <section class="page-view active" data-view="dashboard">
+        <section id="metrics" class="cards"></section>
+
+        <section class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Funil por etapa</h2>
+              <span>Volume atual</span>
+            </div>
+            <div id="funnel" class="funnel"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>Fila urgente</h2>
+              <span>Prioridades do dia</span>
+            </div>
+            <div id="urgent" class="list"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <h2>Lista geral</h2>
+            <span>Solicitações e oportunidades</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Numero</th>
+                  <th>N. proposta</th>
+                  <th>Empresa</th>
+                  <th>Vendedor</th>
+                  <th>Etapa</th>
+                  <th>SLA</th>
+                  <th>Responsável atual</th>
+                  <th>Ultima atualizacao</th>
+                </tr>
+              </thead>
+              <tbody id="requests-table"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-view="funil_vendas">
+        <form id="sales-funnel-filters" class="form-layout">
+          <div class="form-block compact-block">
+            <div class="form-grid reports-grid">
+              <div class="control">
+                <label for="sales-date-start">Data inicial</label>
+                <input id="sales-date-start" name="dateStart" type="date" />
+              </div>
+              <div class="control">
+                <label for="sales-date-end">Data final</label>
+                <input id="sales-date-end" name="dateEnd" type="date" />
+              </div>
+              <div class="control">
+                <label for="sales-seller-filter">Vendedor</label>
+                <select id="sales-seller-filter" name="seller"></select>
+              </div>
+              <div class="control">
+                <label for="sales-branch-filter">Filial</label>
+                <select id="sales-branch-filter" name="branch"></select>
+              </div>
+              <div class="control">
+                <label for="sales-probability-filter">Probabilidade</label>
+                <select id="sales-probability-filter" name="probability">
+                  <option value=""></option>
+                  <option value="Alta">Alta</option>
+                  <option value="Media">Media</option>
+                  <option value="Baixa">Baixa</option>
+                </select>
+              </div>
+            </div>
+            <div class="button-row compact-actions">
+              <button type="submit" class="primary">Aplicar filtros</button>
+              <button type="button" class="secondary" id="clear-sales-funnel-filters">Limpar</button>
+            </div>
+          </div>
+        </form>
+
+        <section id="sales-funnel-metrics" class="cards"></section>
+
+        <section class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Propostas por probabilidade</h2>
+              <span>Alta, Media e Baixa</span>
+            </div>
+            <div id="sales-probability-chart" class="executive-bars"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>Carteira por vendedor</h2>
+              <span>Quem esta com mais oportunidades</span>
+            </div>
+            <div id="sales-seller-chart" class="executive-bars"></div>
+          </div>
+        </section>
+
+        <section class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Entradas por mes</h2>
+              <span>Demanda que entrou no CRM</span>
+            </div>
+            <div id="sales-entry-chart" class="executive-bars"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>Fechamentos por mes</h2>
+              <span>Contratos assinados</span>
+            </div>
+            <div id="sales-win-chart" class="executive-bars"></div>
+          </div>
+        </section>
+
+        <section class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Etapas do funil</h2>
+              <span>Volume por fase comercial</span>
+            </div>
+            <div id="sales-stage-chart" class="executive-bars"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>O que está para fechar</h2>
+              <span>Alta probabilidade de fechamento</span>
+            </div>
+            <div id="sales-closing-list" class="list"></div>
+          </div>
+        </section>
+
+        <section class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Perdas por motivo</h2>
+              <span>Quantidade e valor perdido</span>
+            </div>
+            <div id="sales-loss-chart" class="executive-bars"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>Conversao por vendedor</h2>
+              <span>Entrada, aceite e fechamento</span>
+            </div>
+            <div id="sales-conversion-chart" class="conversion-grid"></div>
+          </div>
+        </section>
+
+        <section class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Cancelamentos por motivo</h2>
+              <span>Quantidade e valor cancelado</span>
+            </div>
+            <div id="sales-cancel-chart" class="executive-bars"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>Ticket medio por vendedor</h2>
+              <span>Valor medio da carteira ativa</span>
+            </div>
+            <div id="sales-ticket-chart" class="executive-bars"></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="card page-view" data-view="proposta_todas proposta_crm">
+        <div class="section-head proposal-module-head">
+          <h2>Módulo número de proposta</h2>
+          <span>Histórico centralizado e geração no padrão sequência/ano</span>
+        </div>
+
+        <div class="proposal-module-panel active" data-proposal-module-panel="historico">
+          <section id="proposal-number-metrics" class="cards proposal-number-metrics"></section>
+
+          <div class="proposal-registry-layout">
+            <div class="card proposal-history-card">
+              <div class="section-head">
+                <h2>Consulta do histórico</h2>
+                <span id="proposal-numbers-summary">Base historica unificada</span>
+              </div>
+
+              <form id="proposal-number-filters" class="form-layout">
+                <div class="form-block compact-block">
+                  <div class="form-grid proposal-number-grid">
+                    <div class="control control-span-2">
+                      <label for="proposal-number-search">Número / cliente / solicitação</label>
+                      <input id="proposal-number-search" name="search" placeholder="899/2026, cliente ou RP-2026-0001" />
+                    </div>
+                    <div class="control">
+                      <label for="proposal-number-manager">Responsável pelo negócio</label>
+                      <input id="proposal-number-manager" name="manager" placeholder="Andre, Lana..." />
+                    </div>
+                    <div class="control">
+                      <label for="proposal-number-status-filter">Status</label>
+                      <select id="proposal-number-status-filter" name="status">
+                        <option value=""></option>
+                        <option value="Gerado">Gerado</option>
+                        <option value="Em uso">Em uso</option>
+                        <option value="Vinculado ao CRM">Vinculado ao CRM</option>
+                        <option value="Cancelado">Cancelado</option>
+                        <option value="Em Negociacao">Em Negociacao</option>
+                      </select>
+                    </div>
+                    <div class="control">
+                      <label for="proposal-number-branch-filter">Filial</label>
+                      <select id="proposal-number-branch-filter" name="branch"></select>
+                    </div>
+                  </div>
+                  <div class="button-row compact-actions">
+                    <button type="submit" class="primary">Aplicar filtros</button>
+                    <button type="button" class="secondary" id="clear-proposal-number-filters">Limpar</button>
+                    <button type="button" class="secondary" id="export-proposal-numbers">Exportar Excel</button>
+                  </div>
+                </div>
+              </form>
+
+              <div class="table-wrap compact-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Numero</th>
+                      <th>Data</th>
+                      <th>Responsável pelo negócio</th>
+                      <th>Cliente</th>
+                      <th>Solicitacao</th>
+                      <th>Etapa</th>
+                      <th>Tipo</th>
+                      <th>Filial</th>
+                      <th>Status</th>
+                      <th>Valor</th>
+                      <th>Arquivo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="proposal-number-table"></tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="proposal-module-panel" data-proposal-module-panel="crm">
+          <div class="card">
+            <div class="section-head">
+              <h2>Requisições CRM sem número de proposta</h2>
+              <span id="proposal-crm-summary">Linhas prontas para gerar o número</span>
+            </div>
+
+            <form id="proposal-crm-filters" class="form-layout">
+              <div class="form-block compact-block">
+                <div class="form-grid proposal-number-grid">
+                  <div class="control">
+                    <label for="proposal-crm-date-start">Data inicial</label>
+                    <input id="proposal-crm-date-start" name="dateStart" type="date" />
+                  </div>
+                  <div class="control">
+                    <label for="proposal-crm-date-end">Data final</label>
+                    <input id="proposal-crm-date-end" name="dateEnd" type="date" />
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="proposal-crm-client-filter">Cliente</label>
+                    <input id="proposal-crm-client-filter" name="client" placeholder="Razao social ou nome fantasia" />
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="proposal-crm-seller-filter">Vendedor</label>
+                    <select id="proposal-crm-seller-filter" name="seller">
+                      <option value=""></option>
+                    </select>
+                  </div>
+                </div>
+                <div class="button-row compact-actions">
+                  <button type="submit" class="primary">Aplicar filtros</button>
+                  <button type="button" class="secondary" id="clear-proposal-crm-filters">Limpar</button>
+                </div>
+              </div>
+            </form>
+
+            <div class="table-wrap compact-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Solicitacao</th>
+                    <th>Cliente</th>
+                    <th>Vendedor</th>
+                    <th>Escopo</th>
+                    <th>Contato</th>
+                    <th>Filial</th>
+                    <th>Etapa</th>
+                    <th>Prazo</th>
+                  </tr>
+                </thead>
+                <tbody id="proposal-crm-request-table"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card" id="proposal-number-form-section">
+            <div class="section-head">
+              <h2>Gerar número de proposta</h2>
+              <span>Selecione uma requisição do CRM para preencher e gerar</span>
+            </div>
+
+            <form id="proposal-number-form" class="form-layout">
+              <div class="form-block compact-block">
+                <div class="form-grid proposal-number-form-grid">
+                  <input id="proposal-number-registry-id" name="registryId" type="hidden" />
+                  <input id="proposal-number-request-id" name="requestId" type="hidden" />
+                  <div class="control">
+                    <label for="proposal-number-issue-date">Data</label>
+                    <input id="proposal-number-issue-date" name="issueDate" type="date" />
+                  </div>
+                  <div class="control control-span-2">
+                      <label for="proposal-number-manager-name">Responsável pelo negócio</label>
+                      <select id="proposal-number-manager-name" name="managerName"></select>
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="proposal-number-client-name">Cliente</label>
+                    <input id="proposal-number-client-name" name="clientName" />
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-document-type">Tipo</label>
+                    <select id="proposal-number-document-type" name="documentType"></select>
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-branch-name">Filial</label>
+                    <select id="proposal-number-branch-name" name="branchName"></select>
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-lead-source">Origem da oportunidade</label>
+                    <select id="proposal-number-lead-source" name="leadSource"></select>
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-status">Status</label>
+                    <select id="proposal-number-status" name="status"></select>
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="proposal-number-service-scope">Escopo / empresa</label>
+                    <input id="proposal-number-service-scope" name="serviceScope" />
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="proposal-number-contact-name">Contato</label>
+                    <input id="proposal-number-contact-name" name="contactName" />
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-phone">Telefone</label>
+                    <input id="proposal-number-phone" name="phone" />
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-industry-segment">Ramo</label>
+                    <select id="proposal-number-industry-segment" name="industrySegment"></select>
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-value">Valor total</label>
+                    <input id="proposal-number-value" name="proposalValue" type="number" step="0.01" min="0" />
+                  </div>
+                  <div class="control">
+                    <label for="proposal-number-bdi">BDI / margem total</label>
+                    <input id="proposal-number-bdi" name="bdi" type="number" step="0.0001" min="0" />
+                  </div>
+                  <div class="control control-span-4">
+                    <label>Detalhamento por servico</label>
+                    <div class="table-wrap service-breakdown-wrap">
+                      <table class="service-breakdown-table">
+                        <thead>
+                          <tr>
+                            <th>Servico</th>
+                            <th>Valor da proposta</th>
+                            <th>Margem %</th>
+                          </tr>
+                        </thead>
+                        <tbody id="proposal-service-lines"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="proposal-number-uploaded-file">Arquivo da proposta</label>
+                    <input id="proposal-number-uploaded-file" name="uploadedFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" />
+                  </div>
+                  <div class="control control-span-4">
+                    <label for="proposal-number-notes">Observacoes</label>
+                    <textarea id="proposal-number-notes" name="notes"></textarea>
+                  </div>
+                  <div class="control control-span-4">
+                    <label for="proposal-number-linked-request">Solicitacao vinculada</label>
+                    <input id="proposal-number-linked-request" readonly placeholder="Nenhuma solicitacao vinculada" />
+                  </div>
+                </div>
+                <div class="button-row compact-actions">
+                  <button type="submit" class="primary" id="proposal-number-submit-button">Gerar número</button>
+                  <button type="button" class="secondary" id="proposal-number-reset-button">Limpar formulario</button>
+                  <button type="button" class="secondary" id="proposal-number-delete-button" style="display:none;">Excluir número</button>
+                </div>
+                <div id="proposal-number-feedback" class="muted password-feedback"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="solicitacoes">
+        <div class="section-head">
+          <h2>Solicitacoes por etapa</h2>
+          <span>Abertura e triagem inicial</span>
+        </div>
+        <div class="stage-tabs" id="solicitacoes-stage-tabs"></div>
+        <div class="table-wrap compact-table-wrap stage-board-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>N. proposta</th>
+                <th>Empresa</th>
+                <th>Vendedor</th>
+                <th>Etapa</th>
+                <th>SLA</th>
+                <th>Responsável atual</th>
+                <th>Atualizacao</th>
+              </tr>
+            </thead>
+            <tbody id="solicitacoes-stage-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="propostas">
+        <div class="section-head">
+          <h2>Fila de propostas por etapa</h2>
+          <span>Preparacao e finalizacao interna</span>
+        </div>
+        <div class="stage-tabs" id="propostas-stage-tabs"></div>
+        <div class="table-wrap compact-table-wrap stage-board-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>N. proposta</th>
+                <th>Empresa</th>
+                <th>Vendedor</th>
+                <th>Etapa</th>
+                <th>SLA</th>
+                <th>Responsável atual</th>
+                <th>Atualizacao</th>
+              </tr>
+            </thead>
+            <tbody id="propostas-stage-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="negociacoes">
+        <div class="section-head">
+          <h2>Negociacoes por etapa</h2>
+          <span>Envio ao vendedor, andamento e desfecho</span>
+        </div>
+        <form id="negotiations-filters" class="form-layout">
+          <div class="form-block compact-block">
+            <div class="form-grid reports-grid">
+              <div class="control">
+                <label for="negotiations-date-start">Data inicial</label>
+                <input id="negotiations-date-start" name="dateStart" type="date" />
+              </div>
+              <div class="control">
+                <label for="negotiations-date-end">Data final</label>
+                <input id="negotiations-date-end" name="dateEnd" type="date" />
+              </div>
+              <div class="control control-span-2">
+                <label for="negotiations-client">Cliente</label>
+                <input id="negotiations-client" name="client" placeholder="Razao social" />
+              </div>
+              <div class="control">
+                <label for="negotiations-seller">Vendedor</label>
+                <input id="negotiations-seller" name="seller" placeholder="Andre, Lana..." />
+              </div>
+            </div>
+            <div class="button-row compact-actions">
+              <button type="submit" class="primary">Aplicar filtros</button>
+              <button type="button" class="secondary" id="clear-negotiations-filters">Limpar</button>
+            </div>
+          </div>
+        </form>
+        <div class="stage-tabs" id="negociacoes-stage-tabs"></div>
+        <div class="table-wrap compact-table-wrap stage-board-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>N. proposta</th>
+                <th>Empresa</th>
+                <th>Vendedor</th>
+                <th>Etapa</th>
+                <th>SLA</th>
+                <th>Responsável atual</th>
+                <th>Atualizacao</th>
+              </tr>
+            </thead>
+            <tbody id="negociacoes-stage-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="contratos">
+        <div class="section-head">
+          <h2>Contratos por etapa</h2>
+          <span>Formalizacao, clausulas e assinatura</span>
+        </div>
+        <div class="stage-tabs" id="contratos-stage-tabs"></div>
+        <div class="table-wrap compact-table-wrap stage-board-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>N. proposta</th>
+                <th>Empresa</th>
+                <th>Vendedor</th>
+                <th>Etapa</th>
+                <th>SLA</th>
+                <th>Responsável atual</th>
+                <th>Atualizacao</th>
+              </tr>
+            </thead>
+            <tbody id="contratos-stage-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="reports-section" class="card page-view" data-view="relatorios">
+        <div class="section-head">
+          <h2>Relatorios</h2>
+          <span id="reports-summary">Base completa para analise e exportacao</span>
+        </div>
+
+        <form id="report-filters" class="form-layout">
+          <div class="form-block compact-block">
+            <div class="form-grid reports-grid">
+              <div class="control">
+                <label for="report-date-start">Data inicial</label>
+                <input id="report-date-start" name="dateStart" type="date" />
+              </div>
+              <div class="control">
+                <label for="report-date-end">Data final</label>
+                <input id="report-date-end" name="dateEnd" type="date" />
+              </div>
+              <div class="control">
+                <label for="report-seller">Vendedor</label>
+                <input id="report-seller" name="seller" placeholder="Andre, Marcela..." />
+              </div>
+              <div class="control">
+                <label for="report-stage">Etapa</label>
+                <select id="report-stage" name="stageCode">
+                  <option value=""></option>
+                  <option value="solicitacao_criada">Solicitacao criada</option>
+                  <option value="em_triagem">Em triagem</option>
+                  <option value="aguardando_informacoes">Aguardando informacoes</option>
+                  <option value="em_preparacao_da_proposta">Em preparacao da proposta</option>
+                  <option value="proposta_finalizada">Proposta finalizada</option>
+                  <option value="enviada_ao_vendedor">Enviada ao vendedor</option>
+                  <option value="em_negociacao">Em negociacao</option>
+                  <option value="proposta_aceita">Proposta aceita</option>
+                  <option value="elaboracao_de_contrato">Elaboracao de contrato</option>
+                  <option value="negociacao_de_clausulas">Negociacao de clausulas</option>
+                  <option value="contrato_assinado">Contrato assinado</option>
+                  <option value="perdida">Perdida</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="report-sla">SLA</label>
+                <select id="report-sla" name="slaStatus">
+                  <option value=""></option>
+                  <option value="No prazo">No prazo</option>
+                  <option value="Em risco">Em risco</option>
+                  <option value="Vencido">Vencido</option>
+                  <option value="Pausado">Pausado</option>
+                  <option value="Encerrado">Encerrado</option>
+                </select>
+              </div>
+              <div class="control control-span-2">
+                <label for="report-search">Cliente / numero</label>
+                <input id="report-search" name="search" placeholder="Razao social ou RP-2026-0001" />
+              </div>
+            </div>
+
+            <div class="button-row compact-actions">
+              <button type="submit" class="primary">Aplicar filtros</button>
+              <button type="button" class="secondary" id="clear-report-filters">Limpar</button>
+              <button type="button" class="secondary" id="export-report">Exportar Excel</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="table-wrap compact-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Numero</th>
+                <th>Empresa</th>
+                <th>Vendedor</th>
+                <th>Etapa</th>
+                <th>SLA</th>
+                <th>Responsável atual</th>
+                <th>Solicitacao</th>
+                <th>Prazo</th>
+                <th>Status final</th>
+                <th>Atualizacao</th>
+              </tr>
+            </thead>
+            <tbody id="report-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="admin_users">
+        <div class="section-head">
+          <h2>Administrar usuários</h2>
+          <span>Cadastro, alteracao de acesso e desativacao</span>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="section-head">
+              <h2>Usuários cadastrados</h2>
+              <span id="admin-users-summary">0 usuário(s)</span>
+            </div>
+            <div class="table-wrap compact-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Perfil</th>
+                    <th>Status</th>
+                    <th>Acao</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-table"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h2>Formulário do usuário</h2>
+              <span>Criar, editar ou desativar acesso</span>
+            </div>
+
+            <form id="admin-user-form" class="form-layout">
+              <input id="admin-user-id" type="hidden" />
+              <div class="form-block compact-block">
+                <div class="form-grid form-grid--wide admin-user-grid">
+                  <div class="control control-span-2">
+                    <label for="admin-user-name">Nome</label>
+                    <input id="admin-user-name" name="name" />
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="admin-user-email">Email</label>
+                    <input id="admin-user-email" name="email" type="email" />
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="admin-user-department">Departamento</label>
+                    <input id="admin-user-department" name="department" />
+                  </div>
+                  <div class="control">
+                    <label for="admin-user-role">Perfil</label>
+                    <select id="admin-user-role" name="role"></select>
+                  </div>
+                  <div class="control">
+                    <label for="admin-user-active">Status</label>
+                    <select id="admin-user-active" name="isActive">
+                      <option value="true">Ativo</option>
+                      <option value="false">Inativo</option>
+                    </select>
+                  </div>
+                  <div class="control control-span-3">
+                    <label>Módulos liberados</label>
+                    <div class="chips" id="admin-user-module-access">
+                      <label class="chip"><input type="checkbox" name="moduleAccess" value="proposta" /> Número de proposta</label>
+                      <label class="chip"><input type="checkbox" name="moduleAccess" value="crm" /> CRM</label>
+                      <label class="chip"><input type="checkbox" name="moduleAccess" value="admin" /> Administrador</label>
+                    </div>
+                  </div>
+                  <div class="control control-span-2">
+                    <label for="admin-user-password">Senha</label>
+                    <input id="admin-user-password" name="password" type="password" placeholder="Obrigatoria na criacao. Em edicao, preencha so para redefinir." />
+                  </div>
+                </div>
+                <div class="button-row compact-actions">
+                  <button type="submit" class="primary">Salvar usuário</button>
+                  <button type="button" class="secondary" id="admin-user-reset">Novo usuário</button>
+                  <button type="button" class="secondary" id="admin-user-deactivate">Desativar</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <h2>Auditoria recente</h2>
+            <span id="admin-audit-summary">0 evento(s)</span>
+          </div>
+          <div class="table-wrap compact-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Usuário</th>
+                  <th>Acao</th>
+                  <th>Entidade</th>
+                  <th>Descricao</th>
+                </tr>
+              </thead>
+              <tbody id="admin-audit-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="alterar_senha">
+        <div class="section-head">
+          <h2>Alterar senha</h2>
+          <span>Atualize o acesso do usuário logado</span>
+        </div>
+
+        <form id="change-password-form" class="form-layout password-page-form">
+          <div class="form-block compact-block">
+            <div class="form-grid form-grid--wide password-grid">
+              <div class="control control-span-2">
+                <label for="current-password">Senha atual</label>
+                <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" />
+              </div>
+              <div class="control">
+                <label for="new-password">Nova senha</label>
+                <input id="new-password" name="newPassword" type="password" autocomplete="new-password" />
+              </div>
+              <div class="control">
+                <label for="confirm-password">Confirmar nova senha</label>
+                <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" />
+              </div>
+            </div>
+            <div class="button-row compact-actions">
+              <button type="submit" class="primary">Salvar nova senha</button>
+            </div>
+            <div id="change-password-feedback" class="muted password-feedback"></div>
+          </div>
+        </form>
+      </section>
+
+      <section id="request-context-section" class="grid-2 page-view context-view" data-view="solicitacoes propostas negociacoes contratos">
+        <div class="card">
+          <div class="section-head">
+            <h2>Ficha da oportunidade</h2>
+            <span>Resumo da requisicao selecionada</span>
+          </div>
+          <div id="detail" class="detail-grid"></div>
+          <div id="proposal-summary-card" class="proposal-summary-card" style="display:none;">
+            <div class="section-head">
+              <h3>Proposta vinculada</h3>
+              <span>Resumo do módulo número de proposta</span>
+            </div>
+            <div id="proposal-summary" class="detail-grid"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <h2>Histórico</h2>
+            <span>Linha do tempo</span>
+          </div>
+          <div id="history" class="timeline"></div>
+        </div>
+      </section>
+
+      <section id="request-form-section" class="card page-view" data-view="solicitacoes">
+        <div class="section-head">
+          <h2>Formulario 1. Abertura da solicitacao</h2>
+          <span>Base da requisicao com dados cadastrais do cliente</span>
+        </div>
+
+        <form id="request-form" class="form-layout">
+          <div class="form-block">
+            <h3>Dados da solicitacao</h3>
+            <div class="form-grid">
+              <div class="control">
+                <label for="request-date">Data da solicitacao</label>
+                <input id="request-date" name="requestDate" type="date" />
+              </div>
+              <div class="control">
+                <label for="deadline-date">Prazo de entrega</label>
+                <input id="deadline-date" name="deadlineDate" type="date" />
+              </div>
+              <div class="control">
+                <label for="seller-name">Vendedor responsável</label>
+                <input id="seller-name" name="sellerName" />
+              </div>
+              <div class="control">
+                <label for="seller-email">Email do vendedor</label>
+                <input id="seller-email" name="sellerEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="branch-name">Unidade / filial</label>
+                <select id="branch-name" name="branchName"></select>
+              </div>
+              <div class="control control-span-2">
+                <label for="lead-source">Origem da oportunidade</label>
+                <select id="lead-source" name="leadSource"></select>
+              </div>
+              <div class="control control-span-3">
+                <label for="initial-note">Observacao inicial da demanda</label>
+                <textarea id="initial-note" name="initialNote"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Dados cadastrais do cliente</h3>
+            <div class="form-grid">
+              <div class="control control-span-3">
+                <label for="legal-name">Razao social</label>
+                <input id="legal-name" name="legalName" />
+              </div>
+              <div class="control control-span-2">
+                <label for="trade-name">Nome fantasia</label>
+                <input id="trade-name" name="tradeName" />
+              </div>
+              <div class="control">
+                <label for="cnpj">CNPJ</label>
+                <input id="cnpj" name="cnpj" />
+              </div>
+              <div class="control">
+                <label for="industry-segment">Segmento</label>
+                <select id="industry-segment" name="industrySegment"></select>
+              </div>
+              <div class="control">
+                <label for="main-email">Email principal</label>
+                <input id="main-email" name="mainEmail" type="email" />
+              </div>
+              <div class="control control-span-3">
+                <label for="address">Endereco</label>
+                <input id="address" name="address" />
+              </div>
+              <div class="control">
+                <label for="address-number">Numero</label>
+                <input id="address-number" name="addressNumber" />
+              </div>
+              <div class="control">
+                <label for="address-complement">Complemento</label>
+                <input id="address-complement" name="addressComplement" />
+              </div>
+              <div class="control">
+                <label for="district">Bairro</label>
+                <input id="district" name="district" />
+              </div>
+              <div class="control">
+                <label for="city">Cidade</label>
+                <input id="city" name="city" />
+              </div>
+              <div class="control">
+                <label for="state">Estado</label>
+                <input id="state" name="state" />
+              </div>
+              <div class="control">
+                <label for="zip-code">CEP</label>
+                <input id="zip-code" name="zipCode" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Contatos do cliente</h3>
+            <div class="form-grid">
+              <div class="control">
+                <label for="primary-contact-name">Contato principal</label>
+                <input id="primary-contact-name" name="primaryContactName" />
+              </div>
+              <div class="control">
+                <label for="primary-contact-role">Cargo</label>
+                <input id="primary-contact-role" name="primaryContactRole" />
+              </div>
+              <div class="control">
+                <label for="primary-contact-email">Email</label>
+                <input id="primary-contact-email" name="primaryContactEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="primary-contact-phone">Telefone</label>
+                <input id="primary-contact-phone" name="primaryContactPhone" />
+              </div>
+              <div class="control">
+                <label for="secondary-contact-name">Contato secundario</label>
+                <input id="secondary-contact-name" name="secondaryContactName" />
+              </div>
+              <div class="control">
+                <label for="secondary-contact-role">Cargo</label>
+                <input id="secondary-contact-role" name="secondaryContactRole" />
+              </div>
+              <div class="control">
+                <label for="secondary-contact-email">Email</label>
+                <input id="secondary-contact-email" name="secondaryContactEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="secondary-contact-phone">Telefone</label>
+                <input id="secondary-contact-phone" name="secondaryContactPhone" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Dados da operacao / requisicao</h3>
+            <div class="control">
+              <label>Tipos de servico</label>
+              <div class="chips">
+                <label class="chip"><input type="checkbox" name="serviceType" value="Seguranca" />Seguranca</label>
+                <label class="chip"><input type="checkbox" name="serviceType" value="Portaria" />Portaria</label>
+                <label class="chip"><input type="checkbox" name="serviceType" value="Limpeza" />Limpeza</label>
+                <label class="chip"><input type="checkbox" name="serviceType" value="Jardinagem" />Jardinagem</label>
+                <label class="chip"><input type="checkbox" name="serviceType" value="Monitoramento" />Monitoramento</label>
+                <label class="chip"><input type="checkbox" name="serviceType" value="Manutencao" />Manutencao</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Beneficios</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control control-span-2">
+                <label for="transport-region">VT regiao / dia</label>
+                <input id="transport-region" name="transportRegion" value="18,00" />
+              </div>
+              <div class="control control-span-2">
+                <label>Vale transporte</label>
+                <div class="chips">
+                  <label class="chip"><input type="checkbox" name="transportOption" value="1 conducao" />1 conducao</label>
+                  <label class="chip"><input type="checkbox" name="transportOption" value="2 conducoes" />2 conducoes</label>
+                  <label class="chip"><input type="checkbox" name="transportOption" value="Integracao" />Integracao</label>
+                  <label class="chip"><input type="checkbox" name="transportOption" value="Outros" />Outros</label>
+                </div>
+              </div>
+              <div class="control">
+                <label for="transport-notes">Obs. VT</label>
+                <textarea id="transport-notes" name="transportNotes"></textarea>
+              </div>
+              <div class="control">
+                <label for="medical-notes">Assistencia medica</label>
+                <textarea id="medical-notes" name="medicalNotes" placeholder="Cobertura, valores, coparticipacao, observacoes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="meal-notes">Refeicao / VR</label>
+                <textarea id="meal-notes" name="mealNotes" placeholder="Valor, regra de concessao e observacoes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="food-notes">VA</label>
+                <textarea id="food-notes" name="foodNotes" placeholder="Valor, regra de concessao e observacoes"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <div class="section-head">
+              <h3>Postos</h3>
+              <button type="button" class="secondary" id="add-post-row">Adicionar linha</button>
+            </div>
+            <div class="table-wrap">
+              <table class="dense-table postos-table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Qtd Postos</th>
+                    <th>Qtd Func.</th>
+                    <th>Funcao</th>
+                    <th>Escala</th>
+                    <th>Entrada</th>
+                    <th>Saida</th>
+                    <th>Sabado</th>
+                    <th>Feriado</th>
+                    <th>Indenizado</th>
+                    <th>Uniforme</th>
+                    <th>Ajuda de custos</th>
+                    <th>Acao</th>
+                  </tr>
+                </thead>
+                <tbody id="post-rows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <div class="section-head">
+              <h3>Equipamentos</h3>
+              <button type="button" class="secondary" id="add-equipment-row">Adicionar linha</button>
+            </div>
+            <div class="table-wrap">
+              <table class="dense-table equipamentos-table">
+                <thead>
+                  <tr>
+                    <th>Categoria</th>
+                    <th>Equipamento</th>
+                    <th>Quantidade</th>
+                    <th>Observacao</th>
+                    <th>Acao</th>
+                  </tr>
+                </thead>
+                <tbody id="equipment-rows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Observacoes e anexos</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control control-span-4">
+                <label for="general-notes">Observacoes gerais</label>
+                <textarea id="general-notes" name="generalNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="initial-attachments">Anexos iniciais</label>
+                <input id="initial-attachments" name="initialAttachments" type="file" multiple />
+              </div>
+              <div class="control control-span-2">
+                <label for="technical-docs">Documentos tecnicos do cliente</label>
+                <input id="technical-docs" name="technicalDocs" type="file" multiple />
+              </div>
+              <div class="control control-span-4">
+                <label for="technical-doc-notes">Obs. documentos tecnicos</label>
+                <textarea id="technical-doc-notes" name="technicalDocNotes"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button type="button" class="secondary" id="preview-request-form">Gerar resumo</button>
+            <button type="submit" class="primary">Salvar solicitacao</button>
+          </div>
+        </form>
+
+        <div id="request-form-preview" class="preview-box"></div>
+      </section>
+
+      <section id="proposal-form-section" class="card page-view" data-view="propostas">
+        <div class="section-head">
+          <h2>Formulario 2. Triagem e preparacao da proposta</h2>
+          <span>Uso interno para validar, registrar pendencias e preparar a proposta</span>
+        </div>
+
+        <form id="proposal-form" class="form-layout">
+          <div class="form-block">
+            <div class="section-head">
+              <h3>Anexos da solicitacao</h3>
+              <span>Arquivos enviados pelo vendedor</span>
+            </div>
+            <div id="proposal-attachments" class="attachment-list empty-state">Nenhum anexo carregado.</div>
+          </div>
+
+          <div class="form-block">
+            <h3>Solicitacao vinculada</h3>
+            <div class="form-grid">
+              <div class="control control-span-2">
+                <label for="selected-request-number">Numero da solicitacao</label>
+                <input id="selected-request-number" name="selectedRequestNumber" readonly />
+              </div>
+              <div class="control control-span-3">
+                <label for="selected-request-company">Cliente</label>
+                <input id="selected-request-company" name="selectedRequestCompany" readonly />
+              </div>
+              <div class="control">
+                <label for="selected-request-stage">Etapa atual</label>
+                <input id="selected-request-stage" name="selectedRequestStage" readonly />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Triagem</h3>
+            <div class="form-grid">
+              <input id="selected-request-id" name="requestId" type="hidden" />
+              <div class="control">
+                <label for="triage-owner-name">Responsável pela triagem</label>
+                <input id="triage-owner-name" name="triageOwnerName" />
+              </div>
+              <div class="control">
+                <label for="triage-owner-email">Email do responsável</label>
+                <input id="triage-owner-email" name="triageOwnerEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="triage-status">Status da triagem</label>
+                <select id="triage-status" name="triageStatus">
+                  <option value=""></option>
+                  <option>Em triagem</option>
+                  <option>Aprovada</option>
+                  <option>Com pendencia</option>
+                  <option>Em preparacao</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="next-stage-code">Mover para etapa</label>
+                <select id="next-stage-code" name="nextStageCode">
+                  <option value=""></option>
+                  <option value="em_triagem">Em triagem</option>
+                  <option value="aguardando_informacoes">Aguardando informacoes</option>
+                  <option value="em_preparacao_da_proposta">Em preparacao da proposta</option>
+                  <option value="proposta_finalizada">Proposta finalizada</option>
+                </select>
+              </div>
+              <div class="control control-span-3">
+                <label for="triage-note">Observacao da triagem</label>
+                <textarea id="triage-note" name="triageNote"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Preparacao da proposta</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control">
+                <label for="proposal-owner-name">Responsável pela proposta</label>
+                <input id="proposal-owner-name" name="proposalOwnerName" />
+              </div>
+              <div class="control">
+                <label for="proposal-owner-email">Email do responsável</label>
+                <input id="proposal-owner-email" name="proposalOwnerEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="expected-completion-date">Data prevista de conclusao</label>
+                <input id="expected-completion-date" name="expectedCompletionDate" type="date" />
+              </div>
+              <div class="control">
+                <label for="proposal-version">Versao da proposta</label>
+                <input id="proposal-version" name="proposalVersion" placeholder="Ex.: v1" />
+              </div>
+              <div class="control control-span-2">
+                <label for="internal-notes">Observacoes internas</label>
+                <textarea id="internal-notes" name="internalNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="commercial-assumptions">Premissas comerciais</label>
+                <textarea id="commercial-assumptions" name="commercialAssumptions"></textarea>
+              </div>
+              <div class="control control-span-4">
+                <label for="operational-assumptions">Premissas operacionais</label>
+                <textarea id="operational-assumptions" name="operationalAssumptions"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="proposal-final-pdf">PDF da proposta</label>
+                <input id="proposal-final-pdf" name="proposalFinalPdf" type="file" accept=".pdf" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Pendencias</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control control-span-2">
+                <label for="pending-reason">Motivo da pendencia</label>
+                <input id="pending-reason" name="pendingReason" placeholder="Ex.: Falta escopo detalhado" />
+              </div>
+              <div class="control">
+                <label for="pending-owner-name">Responsável pela resposta</label>
+                <input id="pending-owner-name" name="pendingOwnerName" />
+              </div>
+              <div class="control">
+                <label for="pending-owner-email">Email do responsável</label>
+                <input id="pending-owner-email" name="pendingOwnerEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="pending-due-date">Prazo da pendencia</label>
+                <input id="pending-due-date" name="pendingDueDate" type="date" />
+              </div>
+              <div class="control control-span-3">
+                <label for="pending-description">Descricao da pendencia</label>
+                <textarea id="pending-description" name="pendingDescription"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button type="submit" class="primary">Salvar triagem</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="commercial-form-section" class="card page-view" data-view="negociacoes">
+        <div class="section-head">
+          <h2>Formulario 3. Comercial e negociacao</h2>
+          <span>Registro de envio ao vendedor, andamento da negociacao e desfecho comercial</span>
+        </div>
+
+        <form id="commercial-form" class="form-layout">
+          <div class="form-block">
+            <div class="section-head">
+              <h3>Arquivos disponiveis</h3>
+              <span>Proposta pronta e anexos comerciais</span>
+            </div>
+            <div id="commercial-attachments" class="attachment-list empty-state">Nenhum arquivo disponivel.</div>
+          </div>
+
+          <div class="form-block">
+            <h3>Solicitacao vinculada</h3>
+            <div class="form-grid">
+              <div class="control control-span-2">
+                <label for="commercial-request-number">Numero da solicitacao</label>
+                <input id="commercial-request-number" readonly />
+              </div>
+              <div class="control control-span-2">
+                <label for="commercial-proposal-number">N. proposta</label>
+                <input id="commercial-proposal-number" readonly />
+              </div>
+              <div class="control control-span-3">
+                <label for="commercial-request-company">Cliente</label>
+                <input id="commercial-request-company" readonly />
+              </div>
+              <div class="control">
+                <label for="commercial-request-stage">Etapa atual</label>
+                <input id="commercial-request-stage" readonly />
+              </div>
+              <input id="commercial-request-id" name="requestId" type="hidden" />
+              <input id="commercial-proposal-registry-id" name="proposalRegistryId" type="hidden" />
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Andamento comercial</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control">
+                <label for="commercial-seller-name">Vendedor responsável</label>
+                <input id="commercial-seller-name" name="sellerName" />
+              </div>
+              <div class="control">
+                <label for="commercial-seller-email">Email do vendedor</label>
+                <input id="commercial-seller-email" name="sellerEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="sent-to-seller-at">Enviado ao vendedor em</label>
+                <input id="sent-to-seller-at" name="sentToSellerAt" type="date" />
+              </div>
+              <div class="control">
+                <label for="seller-receipt-confirmed">Recebimento confirmado</label>
+                <select id="seller-receipt-confirmed" name="sellerReceiptConfirmed">
+                  <option value="false">Nao</option>
+                  <option value="true">Sim</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="negotiation-status">Status da negociacao</label>
+                <select id="negotiation-status" name="negotiationStatus">
+                  <option value=""></option>
+                  <option>Enviada ao vendedor</option>
+                  <option>Em negociacao</option>
+                  <option>Proposta aceita</option>
+                  <option>Perdida</option>
+                  <option>Cancelada</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="last-contact-at">Ultimo contato</label>
+                <input id="last-contact-at" name="lastContactAt" type="date" />
+              </div>
+              <div class="control">
+                <label for="expected-close-date">Previsão de fechamento</label>
+                <input id="expected-close-date" name="expectedCloseDate" type="date" />
+              </div>
+              <div class="control">
+                <label for="commercial-next-stage-code">Mover para etapa</label>
+                <select id="commercial-next-stage-code" name="nextStageCode">
+                  <option value=""></option>
+                  <option value="enviada_ao_vendedor">Enviada ao vendedor</option>
+                  <option value="em_negociacao">Em negociacao</option>
+                  <option value="proposta_aceita">Proposta aceita</option>
+                  <option value="perdida">Perdida</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </div>
+              <div class="control control-span-2">
+                <label for="commercial-next-action">Proxima acao</label>
+                <textarea id="commercial-next-action" name="nextAction"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="commercial-notes">Observacoes comerciais</label>
+                <textarea id="commercial-notes" name="commercialNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="requested-adjustments">Ajustes solicitados pelo cliente</label>
+                <textarea id="requested-adjustments" name="requestedAdjustments"></textarea>
+              </div>
+              <div class="control">
+                <label for="probability-level">Probabilidade</label>
+                <select id="probability-level" name="probabilityLevel">
+                  <option value=""></option>
+                  <option value="Alta">Alta</option>
+                  <option value="Media">Media</option>
+                  <option value="Baixa">Baixa</option>
+                </select>
+              </div>
+              <div class="control control-span-2">
+                <label for="probability-reason">Motivo da probabilidade</label>
+                <textarea id="probability-reason" name="probabilityReason"></textarea>
+              </div>
+              <div class="control">
+                <label for="loss-reason">Motivo padronizado da perda</label>
+                <select id="loss-reason" name="lossReason"></select>
+              </div>
+              <div class="control">
+                <label for="cancel-reason">Motivo padronizado do cancelamento</label>
+                <select id="cancel-reason" name="cancelReason"></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Desfecho comercial</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control">
+                <label for="accepted-at">Data do aceite</label>
+                <input id="accepted-at" name="acceptedAt" type="date" />
+              </div>
+              <div class="control control-span-2">
+                <label for="accepted-scope">Escopo aceito</label>
+                <textarea id="accepted-scope" name="acceptedScope"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="accepted-conditions">Condicoes aceitas</label>
+                <textarea id="accepted-conditions" name="acceptedConditions"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="accepted-note">Observacao do aceite</label>
+                <textarea id="accepted-note" name="acceptedNote"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="acceptance-attachment">Anexo do aceite</label>
+                <input id="acceptance-attachment" name="acceptanceAttachment" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" />
+              </div>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button type="submit" class="primary">Salvar negociacao</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="contract-form-section" class="card page-view" data-view="contratos">
+        <div class="section-head">
+          <h2>Formulario 4. Contratual</h2>
+          <span>Formalizacao do contrato, negociacao de clausulas e assinatura</span>
+        </div>
+
+        <form id="contract-form" class="form-layout">
+          <div class="form-block">
+            <h3>Solicitacao vinculada</h3>
+            <div class="form-grid">
+              <div class="control control-span-2">
+                <label for="contract-request-number">Numero da solicitacao</label>
+                <input id="contract-request-number" readonly />
+              </div>
+              <div class="control control-span-3">
+                <label for="contract-request-company">Cliente</label>
+                <input id="contract-request-company" readonly />
+              </div>
+              <div class="control">
+                <label for="contract-request-stage">Etapa atual</label>
+                <input id="contract-request-stage" readonly />
+              </div>
+              <input id="contract-request-id" name="requestId" type="hidden" />
+              <input id="contract-proposal-registry-id" name="proposalRegistryId" type="hidden" />
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Andamento contratual</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control">
+                <label for="contract-owner-name">Responsável pelo contrato</label>
+                <input id="contract-owner-name" name="contractOwnerName" />
+              </div>
+              <div class="control">
+                <label for="contract-owner-email">Email do responsável</label>
+                <input id="contract-owner-email" name="contractOwnerEmail" type="email" />
+              </div>
+              <div class="control">
+                <label for="contract-started-at">Inicio da elaboracao</label>
+                <input id="contract-started-at" name="contractStartedAt" type="date" />
+              </div>
+              <div class="control">
+                <label for="draft-version">Versao da minuta</label>
+                <input id="draft-version" name="draftVersion" placeholder="Ex.: Minuta 1" />
+              </div>
+              <div class="control">
+                <label for="clause-round-date">Rodada de clausulas</label>
+                <input id="clause-round-date" name="clauseRoundDate" type="date" />
+              </div>
+              <div class="control">
+                <label for="contract-next-stage-code">Mover para etapa</label>
+                <select id="contract-next-stage-code" name="nextStageCode">
+                  <option value=""></option>
+                  <option value="elaboracao_de_contrato">Elaboracao de contrato</option>
+                  <option value="negociacao_de_clausulas">Negociacao de clausulas</option>
+                  <option value="contrato_assinado">Contrato assinado</option>
+                </select>
+              </div>
+              <div class="control control-span-2">
+                <label for="contract-notes">Observacoes contratuais</label>
+                <textarea id="contract-notes" name="contractNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="document-pending-notes">Pendencias documentais</label>
+                <textarea id="document-pending-notes" name="documentPendingNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="clauses-under-discussion">Clausulas em discussao</label>
+                <textarea id="clauses-under-discussion" name="clausesUnderDiscussion"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="legal-notes">Observacoes juridicas</label>
+                <textarea id="legal-notes" name="legalNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="contract-next-action">Proxima acao</label>
+                <textarea id="contract-next-action" name="nextAction"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="initial-draft-file">Minuta inicial</label>
+                <input id="initial-draft-file" name="initialDraftFile" type="file" accept=".pdf,.doc,.docx" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-block">
+            <h3>Assinatura</h3>
+            <div class="form-grid form-grid--wide">
+              <div class="control">
+                <label for="signed-at">Data da assinatura</label>
+                <input id="signed-at" name="signedAt" type="date" />
+              </div>
+              <div class="control">
+                <label for="operation-start-date">Inicio da operacao</label>
+                <input id="operation-start-date" name="operationStartDate" type="date" />
+              </div>
+              <div class="control control-span-2">
+                <label for="signed-contract-file">Contrato assinado</label>
+                <input id="signed-contract-file" name="signedContractFile" type="file" accept=".pdf" />
+              </div>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button type="submit" class="primary">Salvar contratual</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
