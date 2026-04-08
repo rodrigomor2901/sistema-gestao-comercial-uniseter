@@ -214,8 +214,10 @@ let currentUser = {
   name: "",
   email: "",
   roles: [],
-  moduleAccess: ["crm"]
+  moduleAccess: ["crm"],
+  mustChangePassword: false
 };
+let forcePasswordChange = false;
 let adminUsersCache = [];
 let auditLogsCache = [];
 let availableRoles = [];
@@ -948,6 +950,12 @@ function organizeProposalModuleLayout() {
 function setActiveView(view) {
   const role = ROLE_CONFIG[currentRole] || ROLE_CONFIG.diretoria;
   const allowedViews = role.views.filter((item) => isViewAllowedByModule(item));
+  if (forcePasswordChange && !allowedViews.includes("alterar_senha")) {
+    allowedViews.push("alterar_senha");
+  }
+  if (forcePasswordChange && view !== "alterar_senha") {
+    view = "alterar_senha";
+  }
   if (!allowedViews.includes(view)) {
     view = allowedViews[0] || "dashboard";
   }
@@ -976,7 +984,10 @@ function applyRoleAccess(roleKey) {
   document.getElementById("session-user-email").textContent = currentUser.email || "-";
   document.getElementById("session-user-role").textContent = role.label;
   document.querySelectorAll("[data-view-link]").forEach((link) => {
-    const allowed = role.views.includes(link.dataset.viewLink) && isViewAllowedByModule(link.dataset.viewLink);
+    const allowedByRole = role.views.includes(link.dataset.viewLink) && isViewAllowedByModule(link.dataset.viewLink);
+    const allowed = forcePasswordChange
+      ? link.dataset.viewLink === "alterar_senha"
+      : allowedByRole;
     link.style.display = allowed ? "block" : "none";
   });
 
@@ -1728,12 +1739,19 @@ function applyAuthenticatedUser(user) {
     name: user.name,
     email: user.email,
     roles: user.roles || [],
-    moduleAccess: user.moduleAccess || ["crm"]
+    moduleAccess: user.moduleAccess || ["crm"],
+    mustChangePassword: Boolean(user.mustChangePassword)
   };
+  forcePasswordChange = Boolean(user.mustChangePassword);
   currentRole = user.primaryRole || user.roles?.[0] || "vendedor";
   syncLoggedUserIntoForms();
   resetChangePasswordForm();
   applyRoleAccess(currentRole);
+  if (forcePasswordChange) {
+    const feedback = document.getElementById("change-password-feedback");
+    feedback.textContent = "Senha provisória detectada. Troque sua senha para continuar.";
+    setActiveView("alterar_senha");
+  }
 }
 
 function setupRequestForm() {
@@ -1901,6 +1919,7 @@ async function loadRequestAttachments(requestId) {
 }
 
 function showLoginScreen() {
+  forcePasswordChange = false;
   document.getElementById("login-screen").style.display = "grid";
   document.getElementById("app-shell").classList.add("app-hidden");
   document.getElementById("login-feedback").textContent = "";
@@ -2487,7 +2506,11 @@ async function bootstrap() {
       }
 
       document.getElementById("change-password-form").reset();
+      forcePasswordChange = false;
+      currentUser.mustChangePassword = false;
+      applyRoleAccess(currentRole);
       feedback.textContent = result.message || "Senha alterada com sucesso.";
+      setActiveView("dashboard");
     } catch (error) {
       feedback.textContent = error.message;
     }
@@ -2529,13 +2552,15 @@ async function bootstrap() {
   document.getElementById("admin-user-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const userId = document.getElementById("admin-user-id").value;
+    const passwordValue = document.getElementById("admin-user-password").value.trim();
     const payload = {
       name: document.getElementById("admin-user-name").value,
       email: document.getElementById("admin-user-email").value,
       department: document.getElementById("admin-user-department").value,
       role: document.getElementById("admin-user-role").value,
       isActive: document.getElementById("admin-user-active").value === "true",
-      moduleAccess: [...document.querySelectorAll('input[name="moduleAccess"]:checked')].map((input) => input.value)
+      moduleAccess: [...document.querySelectorAll('input[name="moduleAccess"]:checked')].map((input) => input.value),
+      password: passwordValue || undefined
     };
 
     try {

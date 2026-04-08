@@ -123,6 +123,7 @@ function getSessionContext(request, url) {
     roles: sessionFromToken?.roles || [],
     role: String(sessionFromToken?.primaryRole || headerRole || url.searchParams.get("sessionRole") || ""),
     moduleAccess: sessionFromToken?.moduleAccess || [],
+    mustChangePassword: Boolean(sessionFromToken?.mustChangePassword),
     email: String(sessionFromToken?.email || headerEmail || url.searchParams.get("sessionEmail") || "").trim().toLowerCase(),
     name: String(sessionFromToken?.name || headerName || url.searchParams.get("sessionName") || "").trim(),
     authenticated: Boolean(sessionFromToken)
@@ -319,6 +320,7 @@ function createSession(user) {
     roles: user.roles || [],
     primaryRole: user.primaryRole || user.roles?.[0] || "vendedor",
     moduleAccess: user.moduleAccess || ["crm"],
+    mustChangePassword: Boolean(user.mustChangePassword),
     expiresAt
   });
   return token;
@@ -370,7 +372,8 @@ function buildAuthUser(row) {
     email: String(row.email || "").toLowerCase(),
     roles: row.roles?.length ? row.roles : ["vendedor"],
     primaryRole,
-    moduleAccess: normalizeModuleAccess(row.moduleAccess, primaryRole)
+    moduleAccess: normalizeModuleAccess(row.moduleAccess, primaryRole),
+    mustChangePassword: Boolean(row.mustChangePassword)
   };
 }
 
@@ -677,6 +680,13 @@ async function ensurePasswordColumn() {
   `);
 }
 
+async function ensureMustChangePasswordColumn() {
+  await query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+}
+
 async function ensureModuleAccessColumn() {
   await query(`
     ALTER TABLE users
@@ -908,23 +918,59 @@ async function ensureBaseAccessData() {
 
     for (const user of seedUsers) {
       const passwordHash = hashPassword(user.password);
-      const result = await client.query(
-      `INSERT INTO users (name, email, department, is_active, password_hash)
-         VALUES ($1, $2, $3, TRUE, $4)
-         ON CONFLICT (email) DO UPDATE SET
-           name = EXCLUDED.name,
-           department = EXCLUDED.department,
-           password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)
+      const insertResult = await client.query(
+      `INSERT INTO users (name, email, department, is_active, password_hash, must_change_password)
+         VALUES ($1, $2, $3, TRUE, $4, FALSE)
+         ON CONFLICT (email) DO NOTHING
          RETURNING id`,
         [user.name, user.email, user.department, passwordHash]
       );
-      await client.query(
-        `UPDATE users
-         SET module_access = $2::text[]
-         WHERE id = $1`,
-        [result.rows[0].id, defaultModulesForRole(user.role)]
-      );
-      await ensureUserRole(client, result.rows[0].id, roleIds[user.role]);
+
+      let userId = insertResult.rows[0]?.id || null;
+      if (!userId) {
+        const existingUser = await client.query(
+          `SELECT id, module_access
+             FROM users
+            WHERE email = $1`,
+          [user.email]
+        );
+        userId = existingUser.rows[0]?.id || null;
+
+        // Preserve customized access for existing users and only fill modules if blank.
+        const moduleAccess = existingUser.rows[0]?.module_access;
+        if (
+          userId &&
+          (!Array.isArray(moduleAccess) || moduleAccess.length === 0)
+        ) {
+          await client.query(
+            `UPDATE users
+                SET module_access = $2::text[],
+                    must_change_password = COALESCE(must_change_password, FALSE)
+              WHERE id = $1`,
+            [userId, defaultModulesForRole(user.role)]
+          );
+        }
+      } else {
+        await client.query(
+          `UPDATE users
+              SET module_access = $2::text[],
+                  must_change_password = FALSE
+            WHERE id = $1`,
+          [userId, defaultModulesForRole(user.role)]
+        );
+      }
+
+      if (userId) {
+        const roleCountResult = await client.query(
+          `SELECT COUNT(*)::int AS total
+             FROM user_roles
+            WHERE user_id = $1`,
+          [userId]
+        );
+        if ((roleCountResult.rows[0]?.total || 0) === 0) {
+          await ensureUserRole(client, userId, roleIds[user.role]);
+        }
+      }
     }
 
     await ensureLookupValues(client, "loss_reasons", LOSS_REASON_OPTIONS);
@@ -2010,6 +2056,7 @@ async function authenticateUser(email, password) {
        u.name,
        u.email,
        u.module_access AS "moduleAccess",
+       u.must_change_password AS "mustChangePassword",
        u.password_hash AS "passwordHash",
        COALESCE(array_remove(array_agg(r.name ORDER BY r.name), NULL), ARRAY[]::varchar[]) AS roles
      FROM users u
@@ -2017,7 +2064,7 @@ async function authenticateUser(email, password) {
      LEFT JOIN roles r ON r.id = ur.role_id
      WHERE u.is_active = TRUE
        AND LOWER(u.email) = LOWER($1)
-     GROUP BY u.id, u.name, u.email, u.password_hash, u.module_access`,
+     GROUP BY u.id, u.name, u.email, u.password_hash, u.module_access, u.must_change_password`,
     [email]
   );
 
@@ -2039,13 +2086,14 @@ async function getCurrentUser(session) {
        u.name,
        u.email,
        u.module_access AS "moduleAccess",
+       u.must_change_password AS "mustChangePassword",
        COALESCE(array_remove(array_agg(r.name ORDER BY r.name), NULL), ARRAY[]::varchar[]) AS roles
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
      WHERE u.id = $1
        AND u.is_active = TRUE
-     GROUP BY u.id, u.name, u.email, u.module_access`,
+     GROUP BY u.id, u.name, u.email, u.module_access, u.must_change_password`,
     [session.userId]
   );
 
@@ -2101,10 +2149,19 @@ async function changeOwnPassword(session, payload) {
   await query(
     `UPDATE users
      SET password_hash = $2,
+         must_change_password = FALSE,
          updated_at = NOW()
      WHERE id = $1`,
     [session.userId, hashPassword(newPassword)]
   );
+
+  if (session.token && sessions.has(session.token)) {
+    const currentSession = sessions.get(session.token);
+    sessions.set(session.token, {
+      ...currentSession,
+      mustChangePassword: false
+    });
+  }
 
   await logAuditEntry(null, {
     actor: session,
@@ -2138,12 +2195,13 @@ async function listManagedUsers() {
        u.department,
        u.is_active AS "isActive",
        u.module_access AS "moduleAccess",
+       u.must_change_password AS "mustChangePassword",
        COALESCE(array_remove(array_agg(r.name ORDER BY r.name), NULL), ARRAY[]::varchar[]) AS roles
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
      WHERE u.is_active = TRUE
-     GROUP BY u.id, u.name, u.email, u.department, u.is_active, u.module_access
+     GROUP BY u.id, u.name, u.email, u.department, u.is_active, u.module_access, u.must_change_password
      ORDER BY u.name ASC, u.email ASC`
   );
 
@@ -2161,8 +2219,8 @@ async function createManagedUser(payload, session) {
 
   return withTransaction(async (client) => {
     const userResult = await client.query(
-      `INSERT INTO users (name, email, department, is_active, password_hash, module_access)
-       VALUES ($1, $2, $3, $4, $5, $6::text[])
+      `INSERT INTO users (name, email, department, is_active, password_hash, module_access, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6::text[], TRUE)
        RETURNING id`,
       [
         payload.name,
@@ -2219,6 +2277,7 @@ async function updateManagedUser(userId, payload, session) {
            is_active = $5,
            password_hash = COALESCE($6, password_hash),
            module_access = $7::text[],
+           must_change_password = CASE WHEN $6 IS NOT NULL THEN TRUE ELSE must_change_password END,
            updated_at = NOW()
        WHERE id = $1`,
       [
@@ -4085,6 +4144,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 ensurePasswordColumn()
+  .then(() => ensureMustChangePasswordColumn())
   .then(() => ensureModuleAccessColumn())
   .then(() => ensureProposalRegistryColumns())
   .then(() => ensureUppercaseClientNames())
