@@ -27,10 +27,6 @@ body {
     linear-gradient(180deg, #f8f4ec 0%, var(--bg) 100%);
 }
 
-.app-hidden {
-  display: none;
-}
-
 .login-screen {
   min-height: 100vh;
   display: grid;
@@ -118,6 +114,10 @@ body {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+.app.app-hidden {
+  display: none;
 }
 
 .sidebar {
