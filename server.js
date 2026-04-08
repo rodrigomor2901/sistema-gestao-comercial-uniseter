@@ -762,6 +762,13 @@ async function ensureProposalRegistryColumns() {
   `);
 }
 
+async function ensureWorkflowStageColumns() {
+  await query(`
+    ALTER TABLE workflow_stages
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+}
+
 async function ensureUppercaseClientNames() {
   await query(`
     UPDATE clients
@@ -4427,6 +4434,7 @@ const server = http.createServer(async (request, response) => {
 ensurePasswordColumn()
   .then(() => ensureMustChangePasswordColumn())
   .then(() => ensureModuleAccessColumn())
+  .then(() => ensureWorkflowStageColumns())
   .then(() => ensureProposalRegistryColumns())
   .then(() => ensureUppercaseClientNames())
   .then(() => ensureCanonicalSellerNames())
