@@ -15,13 +15,13 @@ const VIEW_CONFIG = {
   },
   funil_vendas: {
     title: "Funil de vendas",
-    subtitle: "VisÃ£o executiva do pipeline comercial, probabilidade, entrada e fechamento.",
+    subtitle: "Visão executiva do pipeline comercial, probabilidade, entrada e fechamento.",
     showExport: true,
     showNewRequest: false
   },
   proposta_todas: {
     title: "Todas as propostas",
-    subtitle: "Consulta do histÃ³rico, resumo geral, upload de arquivo e exportaÃ§Ã£o.",
+    subtitle: "Consulta do histórico, resumo geral, upload de arquivo e exportação.",
     showExport: false,
     showNewRequest: false
   },
@@ -32,32 +32,32 @@ const VIEW_CONFIG = {
     showNewRequest: false
   },
   solicitacoes: {
-    title: "SolicitaÃ§Ãµes",
-    subtitle: "Abertura da requisiÃ§Ã£o e acompanhamento das etapas iniciais.",
+    title: "Solicitações",
+    subtitle: "Abertura da requisição e acompanhamento das etapas iniciais.",
     showExport: false,
     showNewRequest: true
   },
   propostas: {
     title: "Fila de propostas",
-    subtitle: "Triagem, preparacao e finalizacao interna das propostas.",
+    subtitle: "Triagem, preparação e finalização interna das propostas.",
     showExport: false,
     showNewRequest: false
   },
   negociacoes: {
-    title: "NegociaÃ§Ãµes",
+    title: "Negociações",
     subtitle: "Envio ao vendedor, andamento comercial e aceite da proposta.",
     showExport: false,
     showNewRequest: false
   },
   contratos: {
     title: "Contratos",
-    subtitle: "FormalizaÃ§Ã£o contratual, clÃ¡usulas e assinatura.",
+    subtitle: "Formalização contratual, cláusulas e assinatura.",
     showExport: false,
     showNewRequest: false
   },
   relatorios: {
-    title: "RelatÃ³rios",
-    subtitle: "Filtros operacionais e exportaÃ§Ã£o compatÃ­vel com Excel.",
+    title: "Relatórios",
+    subtitle: "Filtros operacionais e exportação compatível com Excel.",
     showExport: true,
     showNewRequest: false
   },
@@ -68,8 +68,8 @@ const VIEW_CONFIG = {
     showNewRequest: false
   },
   admin_users: {
-    title: "Administrar usuÃ¡rios",
-    subtitle: "Cadastro, alteraÃ§Ã£o de acesso e controle de perfis.",
+    title: "Administrar usuários",
+    subtitle: "Cadastro, alteração de acesso e controle de perfis.",
     showExport: false,
     showNewRequest: false
   }
@@ -81,8 +81,8 @@ const MODULE_STAGE_CONFIG = {
   ],
   propostas: [
     { code: "em_triagem", label: "Em triagem" },
-    { code: "aguardando_informacoes", label: "Aguardando informacoes" },
-    { code: "em_preparacao_da_proposta", label: "Em preparacao da proposta" },
+    { code: "aguardando_informacoes", label: "Aguardando informações" },
+    { code: "em_preparacao_da_proposta", label: "Em preparação da proposta" },
     { code: "proposta_finalizada", label: "Proposta finalizada" }
   ],
   negociacoes: [
@@ -130,7 +130,7 @@ const ROLE_CONFIG = {
   },
   propostas: {
     label: "Propostas",
-    note: "Foco nas etapas de triagem, preparacao e apoio operacional de proposta.",
+    note: "Foco nas etapas de triagem, preparação e apoio operacional da proposta.",
     views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "propostas", "relatorios", "alterar_senha"],
     permissions: {
       createRequest: false,
@@ -350,7 +350,7 @@ function renderExecutiveBars(containerId, items, quantityLabel, totalLabel) {
 function renderSalesClosingList(items) {
   const container = document.getElementById("sales-closing-list");
   if (!items?.length) {
-    container.innerHTML = `<div class="muted">Nenhuma oportunidade com previsÃ£o prÃ³xima.</div>`;
+    container.innerHTML = `<div class="muted">Nenhuma oportunidade com previsão próxima.</div>`;
     return;
   }
 
@@ -382,10 +382,10 @@ function renderSalesClosingListDetailed(items) {
       </div>
       <div>${item.requestNumber}${item.proposalNumber ? ` | ${item.proposalNumber}` : ""}</div>
       <div class="muted"><strong>Vendedor:</strong> ${item.seller || "-"}</div>
-      <div class="muted"><strong>Tipo de serviÃ§o:</strong> ${item.serviceScope || "-"}</div>
+      <div class="muted"><strong>Tipo de serviço:</strong> ${item.serviceScope || "-"}</div>
       <div class="muted"><strong>Valor:</strong> ${item.value || "-"}</div>
       <div class="muted"><strong>Margem:</strong> ${item.margin || "-"}</div>
-      <div class="muted"><strong>PrevisÃ£o:</strong> ${item.expectedCloseDate || "-"}</div>
+      <div class="muted"><strong>Previsão:</strong> ${item.expectedCloseDate || "-"}</div>
     </div>
   `).join("");
 }
@@ -403,7 +403,7 @@ function renderConversionGrid(items) {
       <div class="conversion-line"><span>Entradas</span><strong>${item.entries}</strong></div>
       <div class="conversion-line"><span>Aceitas</span><strong>${item.accepted}</strong></div>
       <div class="conversion-line"><span>Fechadas</span><strong>${item.signed}</strong></div>
-      <div class="conversion-line"><span>Conversao final</span><strong>${item.conversionRate}</strong></div>
+      <div class="conversion-line"><span>Conversão final</span><strong>${item.conversionRate}</strong></div>
     </div>
   `).join("");
 }
@@ -469,7 +469,7 @@ function renderProposalSummary(item) {
     ["Data", item.proposalIssueDate || "-"],
     ["Status", item.proposalStatus || "-"],
     ["Valor", item.proposalValue || "-"],
-    ["ResponsÃ¡vel pelo negÃ³cio", item.proposalManager || "-"]
+    ["Responsável pelo negócio", item.proposalManager || "-"]
   ];
 
   card.style.display = "";
@@ -517,7 +517,7 @@ function renderProposalNumbers(items) {
   const summary = document.getElementById("proposal-numbers-summary");
   const importedCount = items.filter((item) => item.importedFromLegacy).length;
   const latest = items[0]?.proposalNumberDisplay || "-";
-  summary.textContent = `${items.length} nÃºmero(s) | Ãºltimo: ${latest} | histÃ³rico: ${importedCount}`;
+  summary.textContent = `${items.length} número(s) | último: ${latest} | histórico: ${importedCount}`;
 
   if (!items.length) {
     container.innerHTML = `
@@ -641,7 +641,7 @@ function renderProposalNumberMetrics(allItems, filteredItems) {
 
   const cards = [
     { label: "Total de propostas", value: String(allItems.length), note: `${currentMonthCount} neste mes`, tone: "info" },
-    { label: "Volume total", value: formatCurrency(totalValue), note: "histÃ³rico completo", tone: "ok" },
+    { label: "Volume total", value: formatCurrency(totalValue), note: "histórico completo", tone: "ok" },
     { label: "Margem media", value: `${avgBdi.toFixed(1).replace(".", ",")}%`, note: "BDI medio geral", tone: "warn" },
     { label: "Filtro atual", value: String(filteredItems.length), note: filteredItems.length ? formatCurrency(filteredValue) : "sem filtros aplicados", tone: "info" }
   ];
@@ -890,12 +890,12 @@ function isViewAllowedByModule(view, moduleAccess = currentUser.moduleAccess || 
 function renderAdminUsers(users) {
   const container = document.getElementById("admin-users-table");
   const summary = document.getElementById("admin-users-summary");
-  summary.textContent = `${users.length} usuÃ¡rio(s)`;
+  summary.textContent = `${users.length} usuário(s)`;
 
   if (!users.length) {
     container.innerHTML = `
       <tr>
-        <td colspan="5" class="muted">Nenhum usuÃ¡rio cadastrado.</td>
+        <td colspan="5" class="muted">Nenhum usuário cadastrado.</td>
       </tr>
     `;
     return;
@@ -1107,7 +1107,7 @@ function applyRoleAccess(roleKey) {
   setActiveView(currentView);
   if (permissions.manageUsers) {
     loadAdminModule().catch((error) => {
-      alert(`NÃ£o foi possÃ­vel carregar a administraÃ§Ã£o de usuÃ¡rios: ${error.message}`);
+      alert(`Não foi possível carregar a administração de usuários: ${error.message}`);
     });
   }
 }
@@ -1198,7 +1198,7 @@ function renderDetail(item) {
     ["Empresa", item.company],
     ["Etapa atual", item.stage],
     ["SLA", item.slaStatus],
-    ["ResponsÃ¡vel atual", item.currentOwner],
+    ["Responsável atual", item.currentOwner],
     ["Vendedor", item.seller],
     ["Data da solicitacao", item.requestDate],
     ["Prazo", item.deadlineDate],
@@ -1259,12 +1259,12 @@ function renderProposalOnlyContext(detail) {
     proposalStatus: detail.status || "-",
     proposalManager: detail.manager || detail.seller || "-",
     proposalValue,
-    nextAction: detail.commercialNextAction || detail.nextAction || detail.commercialAcceptedNote || detail.notes || "NegÃ³cio histÃ³rico em andamento"
+    nextAction: detail.commercialNextAction || detail.nextAction || detail.commercialAcceptedNote || detail.notes || "Negócio histórico em andamento"
   });
 
   const history = [
     {
-      title: detail.stage || "NegÃ³cio histÃ³rico",
+      title: detail.stage || "Negócio histórico",
       meta: `${detail.issueDate || "-"} - ${detail.manager || detail.seller || "Sistema"}`,
       note: detail.notes || "Registro importado para acompanhamento comercial."
     }
@@ -1492,8 +1492,8 @@ function buildProposalPayload() {
 function validateProposalPayload(payload) {
   const missing = [];
   if (!payload.requestId && !payload.proposalRegistryId) missing.push("Selecione uma solicitacao ou proposta");
-  if (!payload.triageOwnerName) missing.push("ResponsÃ¡vel pela triagem");
-  if (!payload.triageOwnerEmail) missing.push("Email do responsÃ¡vel");
+  if (!payload.triageOwnerName) missing.push("Responsável pela triagem");
+  if (!payload.triageOwnerEmail) missing.push("Email do responsável");
   if (!payload.triageStatus) missing.push("Status da triagem");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
   return missing;
@@ -1529,7 +1529,7 @@ function buildCommercialPayload() {
 function validateCommercialPayload(payload) {
   const missing = [];
   if (!payload.requestId && !payload.proposalRegistryId) missing.push("Selecione uma solicitacao ou proposta");
-  if (!payload.sellerName) missing.push("Vendedor responsÃ¡vel");
+  if (!payload.sellerName) missing.push("Vendedor responsável");
   if (!payload.sellerEmail) missing.push("Email do vendedor");
   if (!payload.negotiationStatus) missing.push("Status da negociacao");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
@@ -1561,8 +1561,8 @@ function buildContractPayload() {
 function validateContractPayload(payload) {
   const missing = [];
   if (!payload.requestId) missing.push("Selecione uma solicitacao");
-  if (!payload.contractOwnerName) missing.push("ResponsÃ¡vel pelo contrato");
-  if (!payload.contractOwnerEmail) missing.push("Email do responsÃ¡vel");
+  if (!payload.contractOwnerName) missing.push("Responsável pelo contrato");
+  if (!payload.contractOwnerEmail) missing.push("Email do responsável");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
   return missing;
 }
@@ -1723,7 +1723,7 @@ function validateRequestPayload(payload) {
 
   if (!payload.requestDate) missing.push("Data da solicitacao");
   if (!payload.deadlineDate) missing.push("Prazo de entrega");
-  if (!payload.sellerName) missing.push("Vendedor responsÃ¡vel");
+  if (!payload.sellerName) missing.push("Vendedor responsável");
   if (!payload.sellerEmail) missing.push("Email do vendedor");
   if (!payload.legalName) missing.push("Razao social");
   if (!payload.city) missing.push("Cidade");
@@ -1895,7 +1895,7 @@ async function buildProposalNumberPayload() {
 function validateProposalNumberPayload(payload) {
   const missing = [];
   if (!payload.issueDate) missing.push("Data");
-  if (!payload.managerName) missing.push("ResponsÃ¡vel pelo negÃ³cio");
+  if (!payload.managerName) missing.push("Responsável pelo negócio");
   if (!payload.clientName && !payload.requestId) missing.push("Cliente ou solicitacao vinculada");
   return missing;
 }
@@ -1935,7 +1935,7 @@ function applyAuthenticatedUser(user) {
   applyRoleAccess(currentRole);
   if (forcePasswordChange) {
     const feedback = document.getElementById("change-password-feedback");
-    feedback.textContent = "Senha provisÃ³ria detectada. Troque sua senha para continuar.";
+    feedback.textContent = "Senha provisória detectada. Troque sua senha para continuar.";
     setActiveView("alterar_senha");
   }
 }
@@ -2053,7 +2053,7 @@ function setupRequestForm() {
     try {
       await refreshProposalNumbers();
     } catch (error) {
-      alert(`NÃ£o foi possÃ­vel carregar o histÃ³rico de nÃºmeros: ${error.message}`);
+      alert(`Não foi possível carregar o histórico de números: ${error.message}`);
     }
   });
   document.getElementById("clear-proposal-number-filters").addEventListener("click", async () => {
@@ -2061,7 +2061,7 @@ function setupRequestForm() {
     try {
       await refreshProposalNumbers();
     } catch (error) {
-      alert(`NÃ£o foi possÃ­vel limpar os filtros do mÃ³dulo: ${error.message}`);
+      alert(`Não foi possível limpar os filtros do módulo: ${error.message}`);
     }
   });
   document.getElementById("proposal-crm-filters").addEventListener("submit", async (event) => {
@@ -2451,7 +2451,7 @@ async function bootstrap() {
         scrollToWorkflowForm("negociacoes");
       }
     } catch (error) {
-      alert(`Nao foi possivel abrir a negociaÃ§Ã£o: ${error.message}`);
+      alert(`Não foi possível abrir a negociação: ${error.message}`);
     }
   });
 
@@ -2779,7 +2779,7 @@ async function bootstrap() {
   document.getElementById("admin-user-deactivate").addEventListener("click", async () => {
     const userId = document.getElementById("admin-user-id").value;
     if (!userId) {
-      alert("Selecione um usuÃ¡rio para desativar.");
+      alert("Selecione um usuário para desativar.");
       return;
     }
 
@@ -2789,14 +2789,14 @@ async function bootstrap() {
       });
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Falha ao desativar usuÃ¡rio.");
+        throw new Error(result.error || "Falha ao desativar usuário.");
       }
 
       await loadAdminModule();
       resetAdminUserForm();
-      alert(result.message || "UsuÃ¡rio desativado com sucesso.");
+      alert(result.message || "Usuário desativado com sucesso.");
     } catch (error) {
-      alert(`NÃ£o foi possÃ­vel desativar o usuÃ¡rio: ${error.message}`);
+      alert(`Não foi possível desativar o usuário: ${error.message}`);
     }
   });
 
@@ -2824,12 +2824,12 @@ async function bootstrap() {
     };
 
     if (!payload.name || !payload.email || !payload.role) {
-      alert("Preencha nome, e-mail e perfil do usuÃ¡rio.");
+      alert("Preencha nome, e-mail e perfil do usuário.");
       return;
     }
 
     if (!userId && !passwordValue) {
-      alert("Informe uma senha provisÃ³ria para criar o novo usuÃ¡rio.");
+      alert("Informe uma senha provisória para criar o novo usuário.");
       return;
     }
 
@@ -2841,25 +2841,25 @@ async function bootstrap() {
       });
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Falha ao salvar usuÃ¡rio.");
+        throw new Error(result.error || "Falha ao salvar usuário.");
       }
 
       await loadAdminModule();
       await loadAuthenticatedAppData();
       resetAdminUserForm();
       const successMessage = result.temporaryPassword
-        ? `${result.message || "UsuÃ¡rio salvo com sucesso."}\nSenha provisÃ³ria: ${result.temporaryPassword}`
-        : (result.message || "UsuÃ¡rio salvo com sucesso.");
+        ? `${result.message || "Usuário salvo com sucesso."}\nSenha provisória: ${result.temporaryPassword}`
+        : (result.message || "Usuário salvo com sucesso.");
       alert(successMessage);
     } catch (error) {
-      alert(`NÃ£o foi possÃ­vel salvar o usuÃ¡rio: ${error.message}`);
+      alert(`Não foi possível salvar o usuário: ${error.message}`);
     }
   });
 }
 
 bootstrap().catch((error) => {
   console.error(error);
-  document.body.innerHTML = `<pre style="padding:24px">Erro ao carregar a aplicaÃ§Ã£o: ${error.message}</pre>`;
+  document.body.innerHTML = `<pre style="padding:24px">Erro ao carregar a aplicação: ${error.message}</pre>`;
 });
 
 function requestDetailFallback() {
@@ -2876,6 +2876,9 @@ function requestDetailFallback() {
     history: []
   };
 }
+
+
+
 
 
 

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sistema de GestÃ£o Comercial</title>
+  <title>Sistema de Gestão Comercial</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <section id="login-screen" class="login-screen">
     <div class="login-panel">
       <img src="/unisetter-logo-white-transparent.png" alt="Grupo Uniseter" class="login-screen-logo" />
-      <div class="login-title">GestÃ£o Comercial - Uniseter</div>
+      <div class="login-title">Gestão Comercial - Uniseter</div>
       <form id="login-form" class="login-form">
         <div class="control">
           <label for="login-email">Email</label>
@@ -30,12 +30,12 @@
     <aside class="sidebar">
       <div class="brand">
         <img src="/unisetter-logo.png" alt="Grupo Uniseter" class="brand-logo" />
-        <strong>Sistema de GestÃ£o Comercial</strong>
-        <span>Grupo Uniseter | Base inicial da aplicaÃ§Ã£o</span>
+        <strong>Sistema de Gestão Comercial</strong>
+        <span>Grupo Uniseter | Base inicial da aplicação</span>
       </div>
 
       <div class="session-card">
-        <div class="nav-title">SessÃ£o atual</div>
+        <div class="nav-title">Sessão atual</div>
         <div class="session-user" id="session-user-name">-</div>
         <div class="session-email" id="session-user-email">-</div>
         <div class="session-role" id="session-user-role">-</div>
@@ -77,9 +77,9 @@
       </div>
 
       <div class="module-nav-group" data-module-nav="admin">
-        <div class="nav-title">MÃ³dulo administrador</div>
+        <div class="nav-title">Módulo administrador</div>
         <nav class="nav module-nav">
-          <a href="#" data-view-link="admin_users">Administrar usuÃ¡rios</a>
+          <a href="#" data-view-link="admin_users">Administrar usuários</a>
           <a href="#" data-view-link="alterar_senha">Alterar senha</a>
         </nav>
       </div>
@@ -93,7 +93,7 @@
         </div>
         <div class="button-row">
           <button class="secondary" id="top-export-report">Exportar Excel</button>
-          <button class="primary" id="go-to-request-form">Nova solicitaÃ§Ã£o</button>
+          <button class="primary" id="go-to-request-form">Nova solicitação</button>
         </div>
       </section>
 
@@ -121,7 +121,7 @@
         <section class="card">
           <div class="section-head">
             <h2>Lista geral</h2>
-            <span>SolicitaÃ§Ãµes e oportunidades</span>
+            <span>Solicitações e oportunidades</span>
           </div>
           <div class="table-wrap">
             <table>
@@ -133,7 +133,7 @@
                   <th>Vendedor</th>
                   <th>Etapa</th>
                   <th>SLA</th>
-                  <th>ResponsÃ¡vel atual</th>
+                  <th>Responsável atual</th>
                   <th>Ultima atualizacao</th>
                 </tr>
               </thead>
@@ -203,7 +203,7 @@
         <section class="grid-2">
           <div class="card">
             <div class="section-head">
-              <h2>Entradas por mes</h2>
+              <h2>Entradas por mês</h2>
               <span>Demanda que entrou no CRM</span>
             </div>
             <div id="sales-entry-chart" class="executive-bars"></div>
@@ -211,7 +211,7 @@
 
           <div class="card">
             <div class="section-head">
-              <h2>Fechamentos por mes</h2>
+              <h2>Fechamentos por mês</h2>
               <span>Contratos assinados</span>
             </div>
             <div id="sales-win-chart" class="executive-bars"></div>
@@ -229,7 +229,7 @@
 
           <div class="card">
             <div class="section-head">
-              <h2>O que estÃ¡ para fechar</h2>
+              <h2>O que está para fechar</h2>
               <span>Alta probabilidade de fechamento</span>
             </div>
             <div id="sales-closing-list" class="list"></div>
@@ -247,7 +247,7 @@
 
           <div class="card">
             <div class="section-head">
-              <h2>Conversao por vendedor</h2>
+              <h2>Conversão por vendedor</h2>
               <span>Entrada, aceite e fechamento</span>
             </div>
             <div id="sales-conversion-chart" class="conversion-grid"></div>
@@ -265,7 +265,7 @@
 
           <div class="card">
             <div class="section-head">
-              <h2>Ticket medio por vendedor</h2>
+              <h2>Ticket médio por vendedor</h2>
               <span>Valor medio da carteira ativa</span>
             </div>
             <div id="sales-ticket-chart" class="executive-bars"></div>
@@ -275,8 +275,8 @@
 
       <section class="card page-view" data-view="proposta_todas proposta_crm">
         <div class="section-head proposal-module-head">
-          <h2>MÃ³dulo nÃºmero de proposta</h2>
-          <span>HistÃ³rico centralizado e geraÃ§Ã£o no padrÃ£o sequÃªncia/ano</span>
+          <h2>Módulo proposta</h2>
+          <span>Histórico centralizado e geração no padrão sequência/ano</span>
         </div>
 
         <div class="proposal-module-panel active" data-proposal-module-panel="historico">
@@ -285,7 +285,7 @@
           <div class="proposal-registry-layout">
             <div class="card proposal-history-card">
               <div class="section-head">
-                <h2>Consulta do histÃ³rico</h2>
+                <h2>Consulta do histórico</h2>
                 <span id="proposal-numbers-summary">Base historica unificada</span>
               </div>
 
@@ -293,11 +293,11 @@
                 <div class="form-block compact-block">
                   <div class="form-grid proposal-number-grid">
                     <div class="control control-span-2">
-                      <label for="proposal-number-search">NÃºmero / cliente / solicitaÃ§Ã£o</label>
+                      <label for="proposal-number-search">Número / cliente / solicitação</label>
                       <input id="proposal-number-search" name="search" placeholder="899/2026, cliente ou RP-2026-0001" />
                     </div>
                     <div class="control">
-                      <label for="proposal-number-manager">ResponsÃ¡vel pelo negÃ³cio</label>
+                      <label for="proposal-number-manager">Responsável pelo negócio</label>
                       <input id="proposal-number-manager" name="manager" placeholder="Andre, Lana..." />
                     </div>
                     <div class="control">
@@ -335,7 +335,7 @@
                     <tr>
                       <th>Numero</th>
                       <th>Data</th>
-                      <th>ResponsÃ¡vel pelo negÃ³cio</th>
+                      <th>Responsável pelo negócio</th>
                       <th>Cliente</th>
                       <th>Solicitacao</th>
                       <th>Etapa</th>
@@ -358,7 +358,7 @@
           <div class="card">
             <div class="section-head">
               <h2>Requisições pendentes de proposta</h2>
-              <span id="proposal-crm-summary">Linhas prontas para gerar o nÃºmero</span>
+              <span id="proposal-crm-summary">Linhas prontas para gerar o número</span>
             </div>
 
             <form id="proposal-crm-filters" class="form-layout">
@@ -411,8 +411,8 @@
 
           <div class="card" id="proposal-number-form-section">
             <div class="section-head">
-              <h2>Gerar nÃºmero de proposta</h2>
-              <span>Selecione uma requisiÃ§Ã£o do CRM para preencher e gerar</span>
+              <h2>Gerar proposta</h2>
+              <span>Selecione uma requisição para preencher e gerar</span>
             </div>
 
             <form id="proposal-number-form" class="form-layout">
@@ -425,7 +425,7 @@
                     <input id="proposal-number-issue-date" name="issueDate" type="date" />
                   </div>
                   <div class="control control-span-2">
-                      <label for="proposal-number-manager-name">ResponsÃ¡vel pelo negÃ³cio</label>
+                      <label for="proposal-number-manager-name">Responsável pelo negócio</label>
                       <select id="proposal-number-manager-name" name="managerName"></select>
                   </div>
                   <div class="control control-span-2">
@@ -501,9 +501,9 @@
                   </div>
                 </div>
                 <div class="button-row compact-actions">
-                  <button type="submit" class="primary" id="proposal-number-submit-button">Gerar nÃºmero</button>
+                  <button type="submit" class="primary" id="proposal-number-submit-button">Gerar número</button>
                   <button type="button" class="secondary" id="proposal-number-reset-button">Limpar formulario</button>
-                  <button type="button" class="secondary" id="proposal-number-delete-button" style="display:none;">Excluir nÃºmero</button>
+                  <button type="button" class="secondary" id="proposal-number-delete-button" style="display:none;">Excluir número</button>
                 </div>
                 <div id="proposal-number-feedback" class="muted password-feedback"></div>
               </div>
@@ -514,7 +514,7 @@
 
         <section class="card page-view" data-view="solicitacoes">
           <div class="section-head">
-            <h2>Solicitacoes por etapa</h2>
+            <h2>Solicitações por etapa</h2>
             <span>Abertura inicial pelo vendedor</span>
           </div>
         <div class="stage-tabs" id="solicitacoes-stage-tabs"></div>
@@ -528,7 +528,7 @@
                 <th>Vendedor</th>
                 <th>Etapa</th>
                 <th>SLA</th>
-                <th>ResponsÃ¡vel atual</th>
+                <th>Responsável atual</th>
                 <th>Atualizacao</th>
               </tr>
             </thead>
@@ -540,7 +540,7 @@
         <section class="card page-view" data-view="propostas">
           <div class="section-head">
             <h2>Fila de propostas por etapa</h2>
-            <span>Triagem, pendencias, preparacao e proposta finalizada</span>
+            <span>Triagem, pendências, preparação e proposta finalizada</span>
           </div>
         <div class="stage-tabs" id="propostas-stage-tabs"></div>
         <div class="table-wrap compact-table-wrap stage-board-wrap">
@@ -553,7 +553,7 @@
                 <th>Vendedor</th>
                 <th>Etapa</th>
                 <th>SLA</th>
-                <th>ResponsÃ¡vel atual</th>
+                <th>Responsável atual</th>
                 <th>Atualizacao</th>
               </tr>
             </thead>
@@ -564,7 +564,7 @@
 
       <section class="card page-view" data-view="negociacoes">
         <div class="section-head">
-          <h2>Negociacoes por etapa</h2>
+          <h2>Negociações por etapa</h2>
           <span>Envio ao vendedor, andamento e desfecho</span>
         </div>
         <form id="negotiations-filters" class="form-layout">
@@ -604,7 +604,7 @@
                 <th>Vendedor</th>
                 <th>Etapa</th>
                 <th>SLA</th>
-                <th>ResponsÃ¡vel atual</th>
+                <th>Responsável atual</th>
                 <th>Atualizacao</th>
               </tr>
             </thead>
@@ -629,7 +629,7 @@
                 <th>Vendedor</th>
                 <th>Etapa</th>
                 <th>SLA</th>
-                <th>ResponsÃ¡vel atual</th>
+                <th>Responsável atual</th>
                 <th>Atualizacao</th>
               </tr>
             </thead>
@@ -640,7 +640,7 @@
 
       <section id="reports-section" class="card page-view" data-view="relatorios">
         <div class="section-head">
-          <h2>Relatorios</h2>
+          <h2>Relatórios</h2>
           <span id="reports-summary">Base completa para analise e exportacao</span>
         </div>
 
@@ -665,8 +665,8 @@
                   <option value=""></option>
                   <option value="solicitacao_criada">Solicitacao criada</option>
                   <option value="em_triagem">Em triagem</option>
-                  <option value="aguardando_informacoes">Aguardando informacoes</option>
-                  <option value="em_preparacao_da_proposta">Em preparacao da proposta</option>
+                  <option value="aguardando_informacoes">Aguardando informações</option>
+                  <option value="em_preparacao_da_proposta">Em preparação da proposta</option>
                   <option value="proposta_finalizada">Proposta finalizada</option>
                   <option value="enviada_ao_vendedor">Enviada ao vendedor</option>
                   <option value="em_negociacao">Em negociacao</option>
@@ -712,7 +712,7 @@
                 <th>Vendedor</th>
                 <th>Etapa</th>
                 <th>SLA</th>
-                <th>ResponsÃ¡vel atual</th>
+                <th>Responsável atual</th>
                 <th>Solicitacao</th>
                 <th>Prazo</th>
                 <th>Status final</th>
@@ -726,15 +726,15 @@
 
       <section class="card page-view" data-view="admin_users">
         <div class="section-head">
-          <h2>Administrar usuÃ¡rios</h2>
+          <h2>Administrar usuários</h2>
           <span>Cadastro, alteracao de acesso e desativacao</span>
         </div>
 
         <div class="grid-2">
           <div class="card">
             <div class="section-head">
-              <h2>UsuÃ¡rios cadastrados</h2>
-              <span id="admin-users-summary">0 usuÃ¡rio(s)</span>
+              <h2>Usuários cadastrados</h2>
+              <span id="admin-users-summary">0 usuário(s)</span>
             </div>
             <div class="table-wrap compact-table-wrap">
               <table>
@@ -754,7 +754,7 @@
 
           <div class="card">
             <div class="section-head">
-              <h2>FormulÃ¡rio do usuÃ¡rio</h2>
+              <h2>Formulário do usuário</h2>
               <span>Criar, editar ou desativar acesso</span>
             </div>
 
@@ -786,7 +786,7 @@
                     </select>
                   </div>
                   <div class="control control-span-3">
-                    <label>MÃ³dulos liberados</label>
+                    <label>Módulos liberados</label>
                     <div class="chips" id="admin-user-module-access">
                       <label class="chip"><input type="checkbox" name="moduleAccess" value="proposta" /> Proposta</label>
                       <label class="chip"><input type="checkbox" name="moduleAccess" value="vendas" /> Vendas</label>
@@ -797,12 +797,12 @@
                   </div>
                   <div class="control control-span-2">
                     <label for="admin-user-password">Senha</label>
-                    <input id="admin-user-password" name="password" type="password" placeholder="Senha provisÃ³ria na criaÃ§Ã£o. Em ediÃ§Ã£o, preencha sÃ³ para redefinir e forÃ§ar troca no primeiro acesso." />
+                    <input id="admin-user-password" name="password" type="password" placeholder="Senha provisória na criação. Em edição, preencha só para redefinir e forçar troca no primeiro acesso." />
                   </div>
                 </div>
                 <div class="button-row compact-actions">
-                  <button type="submit" class="primary">Salvar usuÃ¡rio</button>
-                  <button type="button" class="secondary" id="admin-user-reset">Novo usuÃ¡rio</button>
+                  <button type="submit" class="primary">Salvar usuário</button>
+                  <button type="button" class="secondary" id="admin-user-reset">Novo usuário</button>
                   <button type="button" class="secondary" id="admin-user-deactivate">Desativar</button>
                 </div>
               </div>
@@ -820,7 +820,7 @@
               <thead>
                 <tr>
                   <th>Data</th>
-                  <th>UsuÃ¡rio</th>
+                  <th>Usuário</th>
                   <th>Acao</th>
                   <th>Entidade</th>
                   <th>Descricao</th>
@@ -835,7 +835,7 @@
       <section class="card page-view" data-view="alterar_senha">
         <div class="section-head">
           <h2>Alterar senha</h2>
-          <span>Atualize o acesso do usuÃ¡rio logado</span>
+          <span>Atualize o acesso do usuário logado</span>
         </div>
 
         <form id="change-password-form" class="form-layout password-page-form">
@@ -872,7 +872,7 @@
           <div id="proposal-summary-card" class="proposal-summary-card" style="display:none;">
             <div class="section-head">
               <h3>Proposta vinculada</h3>
-              <span>Resumo do mÃ³dulo nÃºmero de proposta</span>
+              <span>Resumo do módulo proposta</span>
             </div>
             <div id="proposal-summary" class="detail-grid"></div>
           </div>
@@ -880,7 +880,7 @@
 
         <div class="card">
           <div class="section-head">
-            <h2>HistÃ³rico</h2>
+            <h2>Histórico</h2>
             <span>Linha do tempo</span>
           </div>
           <div id="history" class="timeline"></div>
@@ -889,7 +889,7 @@
 
       <section id="request-form-section" class="card page-view" data-view="solicitacoes">
         <div class="section-head">
-          <h2>Formulario 1. Abertura da solicitacao</h2>
+          <h2>Formulário 1. Abertura da solicitação</h2>
           <span>Base da requisicao com dados cadastrais do cliente</span>
         </div>
 
@@ -906,7 +906,7 @@
                 <input id="deadline-date" name="deadlineDate" type="date" />
               </div>
               <div class="control">
-                <label for="seller-name">Vendedor responsÃ¡vel</label>
+                <label for="seller-name">Vendedor responsável</label>
                 <input id="seller-name" name="sellerName" />
               </div>
               <div class="control">
@@ -1154,8 +1154,8 @@
 
       <section id="proposal-form-section" class="card page-view" data-view="propostas">
         <div class="section-head">
-          <h2>Formulario 2. Triagem e preparacao da proposta</h2>
-          <span>Uso interno para validar, registrar pendencias e preparar a proposta</span>
+          <h2>Formulário 2. Triagem e preparação da proposta</h2>
+          <span>Uso interno para validar, registrar pendências e preparar a proposta</span>
         </div>
 
         <form id="proposal-form" class="form-layout">
@@ -1188,7 +1188,7 @@
             <div class="form-block">
               <div class="section-head">
                 <h3>Resumo da solicitacao</h3>
-                <span>Informacoes completas enviadas pelo vendedor</span>
+                <span>Informações completas enviadas pelo vendedor</span>
               </div>
               <div id="proposal-request-summary" class="request-summary-grid">
                 <div class="empty-state">Selecione uma solicitacao para visualizar o resumo completo.</div>
@@ -1200,11 +1200,11 @@
             <div class="form-grid">
               <input id="selected-request-id" name="requestId" type="hidden" />
               <div class="control">
-                <label for="triage-owner-name">ResponsÃ¡vel pela triagem</label>
+                <label for="triage-owner-name">Responsável pela triagem</label>
                 <input id="triage-owner-name" name="triageOwnerName" />
               </div>
               <div class="control">
-                <label for="triage-owner-email">Email do responsÃ¡vel</label>
+                <label for="triage-owner-email">Email do responsável</label>
                 <input id="triage-owner-email" name="triageOwnerEmail" type="email" />
               </div>
               <div class="control">
@@ -1214,7 +1214,7 @@
                   <option>Em triagem</option>
                   <option>Aprovada</option>
                   <option>Com pendencia</option>
-                  <option>Em preparacao</option>
+                  <option>Em preparação</option>
                 </select>
               </div>
               <div class="control">
@@ -1222,8 +1222,8 @@
                 <select id="next-stage-code" name="nextStageCode">
                   <option value=""></option>
                   <option value="em_triagem">Em triagem</option>
-                  <option value="aguardando_informacoes">Aguardando informacoes</option>
-                  <option value="em_preparacao_da_proposta">Em preparacao da proposta</option>
+                  <option value="aguardando_informacoes">Aguardando informações</option>
+                  <option value="em_preparacao_da_proposta">Em preparação da proposta</option>
                   <option value="proposta_finalizada">Proposta finalizada</option>
                 </select>
               </div>
@@ -1235,14 +1235,14 @@
           </div>
 
           <div class="form-block">
-            <h3>Preparacao da proposta</h3>
+            <h3>Preparação da proposta</h3>
             <div class="form-grid form-grid--wide">
               <div class="control">
-                <label for="proposal-owner-name">ResponsÃ¡vel pela proposta</label>
+                <label for="proposal-owner-name">Responsável pela proposta</label>
                 <input id="proposal-owner-name" name="proposalOwnerName" />
               </div>
               <div class="control">
-                <label for="proposal-owner-email">Email do responsÃ¡vel</label>
+                <label for="proposal-owner-email">Email do responsável</label>
                 <input id="proposal-owner-email" name="proposalOwnerEmail" type="email" />
               </div>
               <div class="control">
@@ -1273,18 +1273,18 @@
           </div>
 
           <div class="form-block">
-            <h3>Pendencias</h3>
+            <h3>Pendências</h3>
             <div class="form-grid form-grid--wide">
               <div class="control control-span-2">
                 <label for="pending-reason">Motivo da pendencia</label>
                 <input id="pending-reason" name="pendingReason" placeholder="Ex.: Falta escopo detalhado" />
               </div>
               <div class="control">
-                <label for="pending-owner-name">ResponsÃ¡vel pela resposta</label>
+                <label for="pending-owner-name">Responsável pela resposta</label>
                 <input id="pending-owner-name" name="pendingOwnerName" />
               </div>
               <div class="control">
-                <label for="pending-owner-email">Email do responsÃ¡vel</label>
+                <label for="pending-owner-email">Email do responsável</label>
                 <input id="pending-owner-email" name="pendingOwnerEmail" type="email" />
               </div>
               <div class="control">
@@ -1306,7 +1306,7 @@
 
       <section id="commercial-form-section" class="card page-view" data-view="negociacoes">
         <div class="section-head">
-          <h2>Formulario 3. Comercial e negociacao</h2>
+          <h2>Formulário 3. Comercial e negociação</h2>
           <span>Registro de envio ao vendedor, andamento da negociacao e desfecho comercial</span>
         </div>
 
@@ -1347,7 +1347,7 @@
             <h3>Andamento comercial</h3>
             <div class="form-grid form-grid--wide">
               <div class="control">
-                <label for="commercial-seller-name">Vendedor responsÃ¡vel</label>
+                <label for="commercial-seller-name">Vendedor responsável</label>
                 <input id="commercial-seller-name" name="sellerName" />
               </div>
               <div class="control">
@@ -1381,7 +1381,7 @@
                 <input id="last-contact-at" name="lastContactAt" type="date" />
               </div>
               <div class="control">
-                <label for="expected-close-date">PrevisÃ£o de fechamento</label>
+                <label for="expected-close-date">Previsão de fechamento</label>
                 <input id="expected-close-date" name="expectedCloseDate" type="date" />
               </div>
               <div class="control">
@@ -1465,7 +1465,7 @@
 
       <section id="contract-form-section" class="card page-view" data-view="contratos">
         <div class="section-head">
-          <h2>Formulario 4. Contratual</h2>
+          <h2>Formulário 4. Contratual</h2>
           <span>Formalizacao do contrato, negociacao de clausulas e assinatura</span>
         </div>
 
@@ -1494,11 +1494,11 @@
             <h3>Andamento contratual</h3>
             <div class="form-grid form-grid--wide">
               <div class="control">
-                <label for="contract-owner-name">ResponsÃ¡vel pelo contrato</label>
+                <label for="contract-owner-name">Responsável pelo contrato</label>
                 <input id="contract-owner-name" name="contractOwnerName" />
               </div>
               <div class="control">
-                <label for="contract-owner-email">Email do responsÃ¡vel</label>
+                <label for="contract-owner-email">Email do responsável</label>
                 <input id="contract-owner-email" name="contractOwnerEmail" type="email" />
               </div>
               <div class="control">
@@ -1527,7 +1527,7 @@
                 <textarea id="contract-notes" name="contractNotes"></textarea>
               </div>
               <div class="control control-span-2">
-                <label for="document-pending-notes">Pendencias documentais</label>
+                <label for="document-pending-notes">Pendências documentais</label>
                 <textarea id="document-pending-notes" name="documentPendingNotes"></textarea>
               </div>
               <div class="control control-span-2">
@@ -1578,6 +1578,9 @@
   <script src="/app.js"></script>
 </body>
 </html>
+
+
+
 
 
 

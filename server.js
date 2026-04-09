@@ -218,7 +218,7 @@ const ROLE_PERMISSIONS = {
 
 function assertAuthenticated(session) {
   if (!session?.authenticated) {
-    const error = new Error("SessÃ£o expirada ou usuÃ¡rio nÃ£o autenticado.");
+    const error = new Error("Sessão expirada ou usuário não autenticado.");
     error.statusCode = 401;
     throw error;
   }
@@ -231,7 +231,7 @@ function hasPermission(session, permission) {
 
 function assertPermission(session, permission, message) {
   if (!hasPermission(session, permission)) {
-    const error = new Error(message || "Acesso negado para esta acao.");
+    const error = new Error(message || "Acesso negado para esta ação.");
     error.statusCode = 403;
     throw error;
   }
@@ -247,7 +247,7 @@ function hasModuleAccess(session, moduleName) {
 
 function assertModuleAccess(session, moduleName, message) {
   if (!hasModuleAccess(session, moduleName)) {
-    const error = new Error(message || "Seu usuÃ¡rio nÃ£o tem acesso a este mÃ³dulo.");
+    const error = new Error(message || "Seu usuário não tem acesso a este módulo.");
     error.statusCode = 403;
     throw error;
   }
@@ -255,7 +255,7 @@ function assertModuleAccess(session, moduleName, message) {
 
 function assertAnyModuleAccess(session, moduleNames, message) {
   if (!moduleNames.some((moduleName) => hasModuleAccess(session, moduleName))) {
-    const error = new Error(message || "Seu usuÃ¡rio nÃ£o tem acesso a este mÃ³dulo.");
+    const error = new Error(message || "Seu usuário não tem acesso a este módulo.");
     error.statusCode = 403;
     throw error;
   }
@@ -601,8 +601,8 @@ function buildProposalStageCodeSql(alias = "pr") {
 function buildProposalStageLabelSql(alias = "pr") {
   return `CASE
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita') THEN 'Proposta aceita'
-    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'ElaboraÃ§Ã£o de contrato'
-    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'NegociaÃ§Ã£o de clÃ¡usulas'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'Elaboração de contrato'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'Negociação de cláusulas'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'contrato assinado' THEN 'Contrato assinado'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'perdido' THEN 'Perdida'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'cancelado' THEN 'Cancelada'
@@ -754,7 +754,7 @@ async function ensureProposalRegistryColumns() {
     SET probability_level = CASE
       WHEN notes ILIKE '%Probabilidade: Alta%' THEN 'Alta'
       WHEN notes ILIKE '%Probabilidade: Media%' THEN 'Media'
-      WHEN notes ILIKE '%Probabilidade: MÃƒÂ©dia%' THEN 'Media'
+      WHEN notes ILIKE '%Probabilidade: Média%' THEN 'Media'
       WHEN notes ILIKE '%Probabilidade: Baixa%' THEN 'Baixa'
       ELSE probability_level
     END
@@ -929,13 +929,13 @@ async function listAuditLogs(limit = 40) {
 async function ensureBaseAccessData() {
   return withTransaction(async (client) => {
     const roleDefinitions = [
-      ["vendedor", "ResponsÃ¡vel por abrir solicitaÃ§Ãµes e conduzir negociaÃ§Ãµes"],
-      ["comercial_interno", "ResponsÃ¡vel por triagem e apoio comercial"],
-      ["propostas", "ResponsÃ¡vel por elaborar propostas"],
-      ["juridico", "ResponsÃ¡vel por contratos e clÃ¡usulas"],
-      ["gestor", "ResponsÃ¡vel por gestÃ£o e indicadores"],
-      ["diretoria", "ResponsÃ¡vel por acompanhamento total do processo, sem criaÃ§Ã£o de usuÃ¡rios"],
-      ["administrador", "ResponsÃ¡vel por configuraÃ§Ãµes do sistema"]
+      ["vendedor", "Responsável por abrir solicitações e conduzir negociações"],
+      ["comercial_interno", "Responsável por triagem e apoio comercial"],
+      ["propostas", "Responsável por elaborar propostas"],
+      ["juridico", "Responsável por contratos e cláusulas"],
+      ["gestor", "Responsável por gestão e indicadores"],
+      ["diretoria", "Responsável por acompanhamento total do processo, sem criação de usuários"],
+      ["administrador", "Responsável por configurações do sistema"]
     ];
 
     const roleIds = {};
@@ -1989,7 +1989,7 @@ async function createProposalNumber(payload, session) {
       entityType: "proposal_registry",
       entityId: insertResult.rows[0].id,
       requestId: requestId || null,
-      description: `Numero de proposta ${insertResult.rows[0].proposalNumberDisplay} gerado.`,
+      description: `Proposta ${insertResult.rows[0].proposalNumberDisplay} gerado.`,
       metadata: {
         proposalSequence,
         requestId: requestId || null,
@@ -2217,7 +2217,7 @@ async function updateProposalNumber(proposalId, payload, session) {
       entityType: "proposal_registry",
       entityId: proposalId,
       requestId: requestId || current.requestId || null,
-      description: `Numero de proposta ${result.rows[0].proposalNumberDisplay} atualizado.`,
+      description: `Proposta ${result.rows[0].proposalNumberDisplay} atualizado.`,
       metadata: {
         requestId: requestId || current.requestId || null,
         clientName: resolvedClientName
@@ -2245,7 +2245,7 @@ async function deleteProposalNumber(proposalId, session) {
       entityType: "proposal_registry",
       entityId: proposalId,
       requestId: current.requestId || null,
-      description: `Numero de proposta ${current.proposalNumberDisplay} excluido.`,
+      description: `Proposta ${current.proposalNumberDisplay} excluido.`,
       metadata: {
         requestId: current.requestId || null,
         clientName: current.clientName
@@ -2513,7 +2513,7 @@ async function createManagedUser(payload, session) {
       entityType: "user",
       entityId: userResult.rows[0].id,
       targetUserId: userResult.rows[0].id,
-      description: `UsuÃ¡rio ${payload.email} criado com perfil ${payload.role}.`,
+      description: `Usuário ${payload.email} criado com perfil ${payload.role}.`,
       metadata: {
         email: normalizedEmail,
         role: payload.role,
@@ -2579,7 +2579,7 @@ async function updateManagedUser(userId, payload, session) {
       entityType: "user",
       entityId: userId,
       targetUserId: userId,
-      description: `UsuÃ¡rio ${payload.email} atualizado para o perfil ${payload.role}.`,
+      description: `Usuário ${payload.email} atualizado para o perfil ${payload.role}.`,
       metadata: {
         email: normalizedEmail,
         role: payload.role,
@@ -2609,7 +2609,7 @@ async function deactivateManagedUser(userId, session) {
       entityType: "user",
       entityId: userId,
       targetUserId: userId,
-      description: `UsuÃ¡rio ${result.rows[0]?.email || userId} desativado.`,
+      description: `Usuário ${result.rows[0]?.email || userId} desativado.`,
       metadata: {
         email: result.rows[0]?.email || null
       }
@@ -2689,13 +2689,13 @@ function buildSalesFunnelCsv(data) {
     Number(item.totalValue || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
   ]));
 
-  addSection("Ticket medio por vendedor", ["Vendedor", "Quantidade", "Ticket medio"], (data.ticketBySeller || []).map((item) => [
+  addSection("Ticket médio por vendedor", ["Vendedor", "Quantidade", "Ticket médio"], (data.ticketBySeller || []).map((item) => [
     item.label,
     item.value,
     Number(item.averageValue || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
   ]));
 
-  addSection("Conversao por vendedor", ["Vendedor", "Entradas", "Aceitas", "Fechadas", "Conversao final"], (data.conversionBySeller || []).map((item) => [
+  addSection("Conversão por vendedor", ["Vendedor", "Entradas", "Aceitas", "Fechadas", "Conversão final"], (data.conversionBySeller || []).map((item) => [
     item.label,
     item.entries,
     item.accepted,
@@ -2703,7 +2703,7 @@ function buildSalesFunnelCsv(data) {
     item.conversionRate
   ]));
 
-  addSection("O que estÃ¡ para fechar", ["SolicitaÃ§Ã£o", "NÃºmero da proposta", "Cliente", "Vendedor", "Tipo de serviÃ§o", "Probabilidade", "PrevisÃ£o", "Valor", "Margem"], (data.closingSoon || []).map((item) => [
+  addSection("O que está para fechar", ["Solicitação", "Número da proposta", "Cliente", "Vendedor", "Tipo de serviço", "Probabilidade", "Previsão", "Valor", "Margem"], (data.closingSoon || []).map((item) => [
     item.requestNumber,
     item.proposalNumber,
     item.company,
@@ -3270,7 +3270,7 @@ async function getDashboardFromDb(filters = {}) {
 
   return {
     metrics: [
-      { label: "Solicitacoes abertas", value: openItems.length, tone: "info", note: "Carteira atual" },
+      { label: "Solicitações abertas", value: openItems.length, tone: "info", note: "Carteira atual" },
       { label: "No prazo", value: countByStatus("No prazo"), tone: "ok", note: "Dentro do SLA" },
       { label: "Em risco", value: countByStatus("Em risco"), tone: "warn", note: "Atencao imediata" },
       { label: "Vencidas", value: countByStatus("Vencido"), tone: "danger", note: "Fora do SLA" },
@@ -4548,13 +4548,15 @@ ensurePasswordColumn()
   .then(() => ensureBaseAccessData())
   .then(() => {
     server.listen(PORT, HOST, () => {
-      console.log(`Sistema de GestÃ£o Comercial disponÃ­vel em http://localhost:${PORT}`);
+      console.log(`Sistema de Gestão Comercial disponível em http://localhost:${PORT}`);
     });
   })
   .catch((error) => {
-    console.error("Falha ao preparar usuÃ¡rios e perfis iniciais:", error);
+    console.error("Falha ao preparar usuários e perfis iniciais:", error);
     process.exit(1);
   });
+
+
 
 
 
