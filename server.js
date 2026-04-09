@@ -1,4 +1,4 @@
-const http = require("http");
+﻿const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -218,7 +218,7 @@ const ROLE_PERMISSIONS = {
 
 function assertAuthenticated(session) {
   if (!session?.authenticated) {
-    const error = new Error("Sessão expirada ou usuário não autenticado.");
+    const error = new Error("SessÃ£o expirada ou usuÃ¡rio nÃ£o autenticado.");
     error.statusCode = 401;
     throw error;
   }
@@ -239,12 +239,23 @@ function assertPermission(session, permission, message) {
 
 function hasModuleAccess(session, moduleName) {
   const modules = session?.moduleAccess || [];
+  if (moduleName === "crm") {
+    return modules.includes("vendas") || modules.includes("contratos") || modules.includes("relatorios");
+  }
   return modules.includes(moduleName);
 }
 
 function assertModuleAccess(session, moduleName, message) {
   if (!hasModuleAccess(session, moduleName)) {
-    const error = new Error(message || "Seu usuário não tem acesso a este módulo.");
+    const error = new Error(message || "Seu usuÃ¡rio nÃ£o tem acesso a este mÃ³dulo.");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function assertAnyModuleAccess(session, moduleNames, message) {
+  if (!moduleNames.some((moduleName) => hasModuleAccess(session, moduleName))) {
+    const error = new Error(message || "Seu usuÃ¡rio nÃ£o tem acesso a este mÃ³dulo.");
     error.statusCode = 403;
     throw error;
   }
@@ -590,8 +601,8 @@ function buildProposalStageCodeSql(alias = "pr") {
 function buildProposalStageLabelSql(alias = "pr") {
   return `CASE
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita') THEN 'Proposta aceita'
-    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'Elaboração de contrato'
-    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'Negociação de cláusulas'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'ElaboraÃ§Ã£o de contrato'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'NegociaÃ§Ã£o de clÃ¡usulas'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'contrato assinado' THEN 'Contrato assinado'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'perdido' THEN 'Perdida'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'cancelado' THEN 'Cancelada'
@@ -743,7 +754,7 @@ async function ensureProposalRegistryColumns() {
     SET probability_level = CASE
       WHEN notes ILIKE '%Probabilidade: Alta%' THEN 'Alta'
       WHEN notes ILIKE '%Probabilidade: Media%' THEN 'Media'
-      WHEN notes ILIKE '%Probabilidade: MÃ©dia%' THEN 'Media'
+      WHEN notes ILIKE '%Probabilidade: MÃƒÂ©dia%' THEN 'Media'
       WHEN notes ILIKE '%Probabilidade: Baixa%' THEN 'Baixa'
       ELSE probability_level
     END
@@ -918,13 +929,13 @@ async function listAuditLogs(limit = 40) {
 async function ensureBaseAccessData() {
   return withTransaction(async (client) => {
     const roleDefinitions = [
-      ["vendedor", "Responsável por abrir solicitações e conduzir negociações"],
-      ["comercial_interno", "Responsável por triagem e apoio comercial"],
-      ["propostas", "Responsável por elaborar propostas"],
-      ["juridico", "Responsável por contratos e cláusulas"],
-      ["gestor", "Responsável por gestão e indicadores"],
-      ["diretoria", "Responsável por acompanhamento total do processo, sem criação de usuários"],
-      ["administrador", "Responsável por configurações do sistema"]
+      ["vendedor", "ResponsÃ¡vel por abrir solicitaÃ§Ãµes e conduzir negociaÃ§Ãµes"],
+      ["comercial_interno", "ResponsÃ¡vel por triagem e apoio comercial"],
+      ["propostas", "ResponsÃ¡vel por elaborar propostas"],
+      ["juridico", "ResponsÃ¡vel por contratos e clÃ¡usulas"],
+      ["gestor", "ResponsÃ¡vel por gestÃ£o e indicadores"],
+      ["diretoria", "ResponsÃ¡vel por acompanhamento total do processo, sem criaÃ§Ã£o de usuÃ¡rios"],
+      ["administrador", "ResponsÃ¡vel por configuraÃ§Ãµes do sistema"]
     ];
 
     const roleIds = {};
@@ -2502,7 +2513,7 @@ async function createManagedUser(payload, session) {
       entityType: "user",
       entityId: userResult.rows[0].id,
       targetUserId: userResult.rows[0].id,
-      description: `Usuário ${payload.email} criado com perfil ${payload.role}.`,
+      description: `UsuÃ¡rio ${payload.email} criado com perfil ${payload.role}.`,
       metadata: {
         email: normalizedEmail,
         role: payload.role,
@@ -2568,7 +2579,7 @@ async function updateManagedUser(userId, payload, session) {
       entityType: "user",
       entityId: userId,
       targetUserId: userId,
-      description: `Usuário ${payload.email} atualizado para o perfil ${payload.role}.`,
+      description: `UsuÃ¡rio ${payload.email} atualizado para o perfil ${payload.role}.`,
       metadata: {
         email: normalizedEmail,
         role: payload.role,
@@ -2598,7 +2609,7 @@ async function deactivateManagedUser(userId, session) {
       entityType: "user",
       entityId: userId,
       targetUserId: userId,
-      description: `Usuário ${result.rows[0]?.email || userId} desativado.`,
+      description: `UsuÃ¡rio ${result.rows[0]?.email || userId} desativado.`,
       metadata: {
         email: result.rows[0]?.email || null
       }
@@ -2692,7 +2703,7 @@ function buildSalesFunnelCsv(data) {
     item.conversionRate
   ]));
 
-  addSection("O que está para fechar", ["Solicitação", "Número da proposta", "Cliente", "Vendedor", "Tipo de serviço", "Probabilidade", "Previsão", "Valor", "Margem"], (data.closingSoon || []).map((item) => [
+  addSection("O que estÃ¡ para fechar", ["SolicitaÃ§Ã£o", "NÃºmero da proposta", "Cliente", "Vendedor", "Tipo de serviÃ§o", "Probabilidade", "PrevisÃ£o", "Valor", "Margem"], (data.closingSoon || []).map((item) => [
     item.requestNumber,
     item.proposalNumber,
     item.company,
@@ -4254,7 +4265,7 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === "/api/dashboard") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       try {
         const dashboardData = await getDashboardFromDb({
           dateStart: url.searchParams.get("dateStart"),
@@ -4300,7 +4311,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/requests") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "createRequest", "Seu perfil nao pode criar solicitacoes.");
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
@@ -4315,7 +4326,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "DELETE" && /^\/api\/requests\/\d+$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "deleteRequest", "Seu perfil nao pode excluir solicitacoes.");
       const requestId = Number(url.pathname.split("/").pop());
       const removed = await deleteRequest(requestId, session);
@@ -4339,7 +4350,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/reports") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       const items = await getReports({
         dateStart: url.searchParams.get("dateStart"),
         dateEnd: url.searchParams.get("dateEnd"),
@@ -4354,7 +4365,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/reports/export.csv") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       const rows = await getReports({
         dateStart: url.searchParams.get("dateStart"),
         dateEnd: url.searchParams.get("dateEnd"),
@@ -4369,7 +4380,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/requests") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       try {
         const items = await listRequests();
         sendJson(response, 200, filterRowsBySession(items, session));
@@ -4381,7 +4392,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/dashboard/export.csv") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       const dashboardData = await getDashboardFromDb({
         dateStart: url.searchParams.get("dateStart"),
         dateEnd: url.searchParams.get("dateEnd"),
@@ -4395,7 +4406,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && /\/api\/requests\/\d+\/proposal-record$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "saveProposal", "Seu perfil nao pode alterar a fila de propostas.");
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
@@ -4406,7 +4417,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && /\/api\/requests\/\d+\/commercial-record$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "saveCommercial", "Seu perfil nao pode alterar negociacoes.");
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
@@ -4417,7 +4428,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && /\/api\/proposal-numbers\/\d+\/commercial-record$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "saveCommercial", "Seu perfil nao pode alterar negociacoes.");
       const proposalRegistryId = Number(url.pathname.split("/")[3]);
       const body = await readBody(request);
@@ -4430,7 +4441,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && /\/api\/requests\/\d+\/contract-record$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "saveContract", "Seu perfil nao pode alterar o contratual.");
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
@@ -4441,7 +4452,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && /\/api\/proposal-numbers\/\d+\/contract-record$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       assertPermission(session, "saveContract", "Seu perfil nao pode alterar o contratual.");
       const proposalRegistryId = Number(url.pathname.split("/")[3]);
       const body = await readBody(request);
@@ -4454,7 +4465,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && /\/api\/attachments\/\d+\/download$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       const attachmentId = Number(url.pathname.split("/")[3]);
       if (!Number.isFinite(attachmentId)) {
         sendJson(response, 400, { error: "Identificador do anexo invalido." });
@@ -4478,7 +4489,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && /\/api\/requests\/\d+\/attachments$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       const requestId = Number(url.pathname.split("/")[3]);
       if (!Number.isFinite(requestId)) {
         sendJson(response, 400, { error: "Identificador da solicitacao invalido." });
@@ -4494,7 +4505,7 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname.startsWith("/api/requests/")) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso ao modulo CRM.");
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
       const requestId = Number(url.pathname.split("/").pop());
 
       if (!Number.isFinite(requestId)) {
@@ -4537,10 +4548,12 @@ ensurePasswordColumn()
   .then(() => ensureBaseAccessData())
   .then(() => {
     server.listen(PORT, HOST, () => {
-      console.log(`Sistema de Gestão Comercial disponível em http://localhost:${PORT}`);
+      console.log(`Sistema de GestÃ£o Comercial disponÃ­vel em http://localhost:${PORT}`);
     });
   })
   .catch((error) => {
-    console.error("Falha ao preparar usuários e perfis iniciais:", error);
+    console.error("Falha ao preparar usuÃ¡rios e perfis iniciais:", error);
     process.exit(1);
   });
+
+
