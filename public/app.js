@@ -693,7 +693,12 @@ function renderProposalNumbers(items) {
         <div class="table-action-group">
           ${item.id && item.uploadedFileName ? `<a class="attachment-link" href="/api/proposal-numbers/${item.id}/download?${sessionQueryString()}" target="_blank" rel="noopener noreferrer">Baixar</a>` : `<span class="muted">-</span>`}
           ${item.sourceType === "request"
-            ? `<button type="button" class="table-action proposal-generate-button" data-request-id="${item.requestId}">Gerar numero</button>`
+            ? `
+              <button type="button" class="table-action proposal-generate-button" data-request-id="${item.requestId}">Gerar numero</button>
+              ${rolePermissions(currentRole).deleteRequest
+                ? `<button type="button" class="table-action danger request-delete-button" data-request-id="${item.requestId}">Excluir</button>`
+                : ""}
+            `
             : `<button type="button" class="table-action proposal-edit-button" data-proposal-id="${item.id}">Editar</button>`}
         </div>
       </td>
@@ -1044,6 +1049,46 @@ function resetAdminUserForm() {
   document.getElementById("admin-user-role").value = defaultRole;
   applyAdminModuleSelection(defaultModulesForRole(defaultRole));
   applyAdminStageSelection(defaultStageAccessForRole(defaultRole));
+}
+
+async function deleteRequestAndRefresh(requestId) {
+  const response = await fetchWithSession(`/api/requests/${requestId}`, {
+    method: "DELETE"
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || "Falha ao excluir solicitacao.");
+  }
+
+  const [requests, reportItems] = await Promise.all([
+    refreshRequestsTable(),
+    refreshReports(),
+    refreshProposalNumbers(),
+    refreshCrmProposalRequests(),
+    refreshDashboard()
+  ]);
+
+  reportRowsCache = reportItems;
+  renderAllStageBoards(reportRowsCache);
+
+  if (selectedRequestId && String(selectedRequestId) === String(requestId)) {
+    if (requests.length) {
+      await selectRequest(requests[0].id);
+    } else {
+      selectedRequestId = null;
+      updateRequestDeleteButton(null);
+      renderDetail(requestDetailFallback());
+      renderHistory([]);
+      renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
+      renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_aceite"]);
+      populateProposalForm(requestDetailFallback());
+      populateCommercialForm(requestDetailFallback());
+      populateContractForm(requestDetailFallback());
+      populateProposalNumberLinkedRequest(null);
+    }
+  }
+
+  return result;
 }
 
 function updateRequestDeleteButton(requestId) {
@@ -2053,38 +2098,7 @@ function setupRequestForm() {
     if (!confirmed) return;
 
     try {
-      const response = await fetchWithSession(`/api/requests/${selectedRequestId}`, {
-        method: "DELETE"
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || "Falha ao excluir solicitacao.");
-      }
-
-      const [requests, reportItems] = await Promise.all([
-        refreshRequestsTable(),
-        refreshReports()
-      ]);
-
-      reportRowsCache = reportItems;
-      renderAllStageBoards(reportRowsCache);
-      await refreshDashboard();
-
-      if (requests.length) {
-        await selectRequest(requests[0].id);
-      } else {
-        selectedRequestId = null;
-        updateRequestDeleteButton(null);
-        renderDetail(requestDetailFallback());
-        renderHistory([]);
-        renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
-        renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_aceite"]);
-        populateProposalForm(requestDetailFallback());
-        populateCommercialForm(requestDetailFallback());
-        populateContractForm(requestDetailFallback());
-        populateProposalNumberLinkedRequest(null);
-      }
-
+      const result = await deleteRequestAndRefresh(selectedRequestId);
       alert(result.message || "Solicitacao excluida com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel excluir a solicitacao: ${error.message}`);
@@ -2492,6 +2506,24 @@ async function bootstrap() {
     prefillProposalNumberFromCrmRequest(selected);
     setActiveView("proposta_crm");
     document.getElementById("proposal-number-form-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  document.getElementById("proposal-number-table").addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest(".request-delete-button");
+    if (!deleteButton) return;
+
+    const requestId = deleteButton.dataset.requestId;
+    if (!requestId) return;
+
+    const confirmed = window.confirm("Deseja excluir esta solicitacao pendente de proposta? Esta acao nao pode ser desfeita.");
+    if (!confirmed) return;
+
+    try {
+      const result = await deleteRequestAndRefresh(requestId);
+      alert(result.message || "Solicitacao excluida com sucesso.");
+    } catch (error) {
+      alert(`Nao foi possivel excluir a solicitacao: ${error.message}`);
+    }
   });
 
   document.getElementById("sales-closing-list").addEventListener("click", async (event) => {
