@@ -26,8 +26,8 @@ const VIEW_CONFIG = {
     showNewRequest: false
   },
   proposta_crm: {
-    title: "Requisições",
-    subtitle: "Requisições sem número de proposta, prontas para gerar o cadastro.",
+    title: "Requisições pendentes de proposta",
+    subtitle: "Requisições sem proposta gerada, prontas para seguir para o cadastro.",
     showExport: false,
     showNewRequest: false
   },
@@ -522,7 +522,7 @@ function renderProposalNumbers(items) {
   if (!items.length) {
     container.innerHTML = `
       <tr>
-        <td colspan="11" class="muted">Nenhum numero de proposta encontrado.</td>
+        <td colspan="11" class="muted">Nenhuma proposta encontrada.</td>
       </tr>
     `;
     return;
@@ -666,7 +666,7 @@ function renderProposalNumbers(items) {
   if (!items.length) {
     container.innerHTML = `
       <tr>
-        <td colspan="11" class="muted">Nenhum numero de proposta encontrado.</td>
+        <td colspan="11" class="muted">Nenhuma proposta encontrada.</td>
       </tr>
     `;
     return;
@@ -728,12 +728,12 @@ function renderProposalNumberMetrics(allItems, filteredItems) {
 function renderCrmProposalRequests(items) {
   const container = document.getElementById("proposal-crm-request-table");
   const summary = document.getElementById("proposal-crm-summary");
-  summary.textContent = `${items.length} requisicao(oes) sem numero de proposta`;
+  summary.textContent = `${items.length} requisição(ões) pendentes de proposta`;
 
   if (!items.length) {
     container.innerHTML = `
       <tr>
-        <td colspan="8" class="muted">Nenhuma requisicao pendente de numero de proposta.</td>
+        <td colspan="8" class="muted">Nenhuma requisição pendente de proposta.</td>
       </tr>
     `;
     return;
@@ -2689,7 +2689,7 @@ async function bootstrap() {
     const registryId = document.getElementById("proposal-number-registry-id").value;
     if (!registryId) return;
 
-    const confirmed = window.confirm("Deseja excluir este número de proposta? A requisição vinculada voltará para a aba Requisições.");
+    const confirmed = window.confirm("Deseja excluir esta proposta? A requisição vinculada voltará para a aba Requisições pendentes de proposta.");
     if (!confirmed) return;
 
     try {
@@ -2876,5 +2876,6 @@ function requestDetailFallback() {
     history: []
   };
 }
+
 
 

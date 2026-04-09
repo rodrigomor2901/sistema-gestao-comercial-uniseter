@@ -2110,7 +2110,7 @@ async function updateProposalNumber(proposalId, payload, session) {
     const current = await getProposalNumberDetail(proposalId, session);
     const totals = deriveProposalTotals(payload);
     if (!current) {
-      const error = new Error("Numero de proposta nao encontrado.");
+      const error = new Error("Proposta nao encontrada.");
       error.statusCode = 404;
       throw error;
     }
@@ -2232,7 +2232,7 @@ async function deleteProposalNumber(proposalId, session) {
   return withTransaction(async (client) => {
     const current = await getProposalNumberDetail(proposalId, session);
     if (!current) {
-      const error = new Error("Numero de proposta nao encontrado.");
+      const error = new Error("Proposta nao encontrada.");
       error.statusCode = 404;
       throw error;
     }
@@ -4097,7 +4097,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/proposal-numbers") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
       const items = await listProposalNumbers({
         search: url.searchParams.get("search"),
         manager: url.searchParams.get("manager"),
@@ -4111,7 +4111,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/proposal-numbers/crm-requests") {
         assertAuthenticated(session);
-        assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
+        assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
         const items = await listCrmRequestsWithoutProposal({
           dateStart: url.searchParams.get("dateStart"),
           dateEnd: url.searchParams.get("dateEnd"),
@@ -4124,11 +4124,11 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && /\/api\/proposal-numbers\/\d+$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
       const proposalId = Number(url.pathname.split("/").pop());
       const detail = await getProposalNumberDetail(proposalId, session);
       if (!detail) {
-        sendJson(response, 404, { error: "Numero de proposta nao encontrado." });
+        sendJson(response, 404, { error: "Proposta nao encontrada." });
         return;
       }
       sendJson(response, 200, detail);
@@ -4137,7 +4137,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/proposal-numbers/export.csv") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
       const rows = await listProposalNumbers({
         search: url.searchParams.get("search"),
         manager: url.searchParams.get("manager"),
@@ -4151,13 +4151,13 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/proposal-numbers/generate") {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
-      assertPermission(session, "createProposalNumber", "Seu perfil nao pode gerar numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
+      assertPermission(session, "createProposalNumber", "Seu perfil nao pode gerar proposta.");
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
       const created = await createProposalNumber(payload, session);
       sendJson(response, 201, {
-        message: "Numero de proposta gerado com sucesso.",
+        message: "Proposta gerada com sucesso.",
         proposalNumber: created
       });
       return;
@@ -4165,14 +4165,14 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "PUT" && /\/api\/proposal-numbers\/\d+$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
-      assertPermission(session, "createProposalNumber", "Seu perfil nao pode alterar numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
+      assertPermission(session, "createProposalNumber", "Seu perfil nao pode alterar proposta.");
       const proposalId = Number(url.pathname.split("/").pop());
       const body = await readBody(request);
       const payload = JSON.parse(body || "{}");
       const updated = await updateProposalNumber(proposalId, payload, session);
       sendJson(response, 200, {
-        message: "Numero de proposta atualizado com sucesso.",
+        message: "Proposta atualizada com sucesso.",
         proposalNumber: updated
       });
       return;
@@ -4180,8 +4180,8 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "DELETE" && /\/api\/proposal-numbers\/\d+$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
-      assertPermission(session, "createProposalNumber", "Seu perfil nao pode excluir numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
+      assertPermission(session, "createProposalNumber", "Seu perfil nao pode excluir proposta.");
       const proposalId = Number(url.pathname.split("/").pop());
       const removed = await deleteProposalNumber(proposalId, session);
       sendJson(response, 200, {
@@ -4192,7 +4192,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && /\/api\/proposal-numbers\/\d+\/download$/.test(url.pathname)) {
       assertAuthenticated(session);
-      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo numero de proposta.");
+      assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
       const proposalId = Number(url.pathname.split("/")[3]);
       const file = await getProposalRegistryFile(proposalId, session);
       if (!file || !file.storagePath) {
@@ -4555,5 +4555,6 @@ ensurePasswordColumn()
     console.error("Falha ao preparar usuÃ¡rios e perfis iniciais:", error);
     process.exit(1);
   });
+
 
 

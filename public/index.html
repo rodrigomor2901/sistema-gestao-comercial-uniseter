@@ -44,10 +44,11 @@
       </div>
 
       <div class="module-nav-group" data-module-nav="proposta">
-        <div class="nav-title">Módulo número de proposta</div>
+        <div class="nav-title">Módulo proposta</div>
         <nav class="nav module-nav">
           <a href="#" data-view-link="proposta_todas">Todas as propostas</a>
-          <a href="#" data-view-link="proposta_crm">Requisições</a>
+          <a href="#" data-view-link="proposta_crm">Requisições pendentes de proposta</a>
+          <a href="#" data-view-link="propostas">Fila de propostas</a>
         </nav>
       </div>
 
@@ -57,7 +58,6 @@
           <a href="#" class="active" data-view-link="dashboard">Dashboard</a>
           <a href="#" data-view-link="funil_vendas">Funil de vendas</a>
           <a href="#" data-view-link="solicitacoes">Solicitações</a>
-          <a href="#" data-view-link="propostas">Fila de propostas</a>
           <a href="#" data-view-link="negociacoes">Negociações</a>
         </nav>
       </div>
@@ -357,7 +357,7 @@
         <div class="proposal-module-panel" data-proposal-module-panel="crm">
           <div class="card">
             <div class="section-head">
-              <h2>Requisições sem número de proposta</h2>
+              <h2>Requisições pendentes de proposta</h2>
               <span id="proposal-crm-summary">Linhas prontas para gerar o nÃºmero</span>
             </div>
 
@@ -788,7 +788,7 @@
                   <div class="control control-span-3">
                     <label>MÃ³dulos liberados</label>
                     <div class="chips" id="admin-user-module-access">
-                      <label class="chip"><input type="checkbox" name="moduleAccess" value="proposta" /> NÃºmero de proposta</label>
+                      <label class="chip"><input type="checkbox" name="moduleAccess" value="proposta" /> Proposta</label>
                       <label class="chip"><input type="checkbox" name="moduleAccess" value="vendas" /> Vendas</label>
                       <label class="chip"><input type="checkbox" name="moduleAccess" value="contratos" /> Contratos</label>
                       <label class="chip"><input type="checkbox" name="moduleAccess" value="relatorios" /> Relatórios</label>
@@ -1578,6 +1578,8 @@
   <script src="/app.js"></script>
 </body>
 </html>
+
+
 
 
 
