@@ -915,6 +915,15 @@ async function ensureCommercialRecordColumns() {
   `);
 }
 
+async function ensureRequestPendingResponseColumns() {
+  await query(`
+    ALTER TABLE request_pending_info
+    ADD COLUMN IF NOT EXISTS responded_by_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS response_note TEXT,
+    ADD COLUMN IF NOT EXISTS responded_at TIMESTAMPTZ
+  `);
+}
+
 async function ensureAuditLogTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -1275,6 +1284,105 @@ function validateRequestPayload(payload) {
   return missing;
 }
 
+async function replaceClientContacts(client, clientId, payload) {
+  await client.query("DELETE FROM client_contacts WHERE client_id = $1", [clientId]);
+
+  await client.query(
+    `INSERT INTO client_contacts (client_id, name, job_title, email, phone, is_primary)
+     VALUES ($1, $2, $3, $4, $5, TRUE)`,
+    [
+      clientId,
+      payload.primaryContactName,
+      payload.primaryContactRole || null,
+      payload.primaryContactEmail || null,
+      payload.primaryContactPhone || null
+    ]
+  );
+
+  if (payload.secondaryContactName || payload.secondaryContactEmail || payload.secondaryContactPhone) {
+    await client.query(
+      `INSERT INTO client_contacts (client_id, name, job_title, email, phone, is_primary)
+       VALUES ($1, $2, $3, $4, $5, FALSE)`,
+      [
+        clientId,
+        payload.secondaryContactName || "Contato secundario",
+        payload.secondaryContactRole || null,
+        payload.secondaryContactEmail || null,
+        payload.secondaryContactPhone || null
+      ]
+    );
+  }
+}
+
+async function replaceRequestStructure(client, requestId, payload) {
+  await client.query("DELETE FROM request_services WHERE request_id = $1", [requestId]);
+  await client.query("DELETE FROM request_benefits WHERE request_id = $1", [requestId]);
+  await client.query("DELETE FROM request_posts WHERE request_id = $1", [requestId]);
+  await client.query("DELETE FROM request_equipments WHERE request_id = $1", [requestId]);
+
+  for (const serviceType of payload.serviceTypes || []) {
+    await client.query(
+      "INSERT INTO request_services (request_id, service_type) VALUES ($1, $2)",
+      [requestId, slugify(serviceType)]
+    );
+  }
+
+  for (const benefit of mapBenefits(payload)) {
+    await client.query(
+      `INSERT INTO request_benefits (
+        request_id, benefit_type, option_label, region_value, notes
+      ) VALUES ($1, $2, $3, $4, $5)`,
+      [
+        requestId,
+        benefit.benefitType,
+        benefit.optionLabel,
+        benefit.regionValue,
+        benefit.notes
+      ]
+    );
+  }
+
+  for (const post of payload.posts || []) {
+    await client.query(
+      `INSERT INTO request_posts (
+        request_id, post_type, qty_posts, qty_workers, function_name, work_scale,
+        start_time, end_time, saturday_time, holiday_flag, indemnified_flag,
+        uniform_text, cost_allowance_value
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        requestId,
+        slugify(post.postType),
+        toNullableNumber(post.postQty),
+        toNullableNumber(post.workerQty),
+        post.functionName || null,
+        post.workScale || null,
+        post.startTime || null,
+        post.endTime || null,
+        post.saturdayTime || null,
+        post.holidayFlag === "" ? null : post.holidayFlag === "Sim",
+        post.indemnifiedFlag === "" ? null : post.indemnifiedFlag === "Sim",
+        post.uniformText || null,
+        toNullableNumber(post.costAllowance)
+      ]
+    );
+  }
+
+  for (const equipment of payload.equipments || []) {
+    await client.query(
+      `INSERT INTO request_equipments (
+        request_id, category, equipment_name, quantity, notes
+      ) VALUES ($1, $2, $3, $4, $5)`,
+      [
+        requestId,
+        slugify(equipment.category || ""),
+        equipment.equipmentName,
+        toNullableNumber(equipment.equipmentQty),
+        equipment.equipmentNotes || null
+      ]
+    );
+  }
+}
+
 async function createRequest(payload, session) {
   const missing = validateRequestPayload(payload);
   if (missing.length) {
@@ -1310,32 +1418,7 @@ async function createRequest(payload, session) {
     );
 
     const clientId = clientResult.rows[0].id;
-
-    await client.query(
-      `INSERT INTO client_contacts (client_id, name, job_title, email, phone, is_primary)
-       VALUES ($1, $2, $3, $4, $5, TRUE)`,
-      [
-        clientId,
-        payload.primaryContactName,
-        payload.primaryContactRole || null,
-        payload.primaryContactEmail || null,
-        payload.primaryContactPhone || null
-      ]
-    );
-
-    if (payload.secondaryContactName || payload.secondaryContactEmail || payload.secondaryContactPhone) {
-      await client.query(
-        `INSERT INTO client_contacts (client_id, name, job_title, email, phone, is_primary)
-         VALUES ($1, $2, $3, $4, $5, FALSE)`,
-        [
-          clientId,
-          payload.secondaryContactName || "Contato secundario",
-          payload.secondaryContactRole || null,
-          payload.secondaryContactEmail || null,
-          payload.secondaryContactPhone || null
-        ]
-      );
-    }
+    await replaceClientContacts(client, clientId, payload);
 
     const requestNumber = await generateRequestNumber(client);
 
@@ -1363,68 +1446,7 @@ async function createRequest(payload, session) {
     );
 
     const requestId = requestResult.rows[0].id;
-
-    for (const serviceType of payload.serviceTypes || []) {
-      await client.query(
-        "INSERT INTO request_services (request_id, service_type) VALUES ($1, $2)",
-        [requestId, slugify(serviceType)]
-      );
-    }
-
-    for (const benefit of mapBenefits(payload)) {
-      await client.query(
-        `INSERT INTO request_benefits (
-          request_id, benefit_type, option_label, region_value, notes
-        ) VALUES ($1, $2, $3, $4, $5)`,
-        [
-          requestId,
-          benefit.benefitType,
-          benefit.optionLabel,
-          benefit.regionValue,
-          benefit.notes
-        ]
-      );
-    }
-
-    for (const post of payload.posts || []) {
-      await client.query(
-        `INSERT INTO request_posts (
-          request_id, post_type, qty_posts, qty_workers, function_name, work_scale,
-          start_time, end_time, saturday_time, holiday_flag, indemnified_flag,
-          uniform_text, cost_allowance_value
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          requestId,
-          slugify(post.postType),
-          toNullableNumber(post.postQty),
-          toNullableNumber(post.workerQty),
-          post.functionName || null,
-          post.workScale || null,
-          post.startTime || null,
-          post.endTime || null,
-          post.saturdayTime || null,
-          post.holidayFlag === "" ? null : post.holidayFlag === "Sim",
-          post.indemnifiedFlag === "" ? null : post.indemnifiedFlag === "Sim",
-          post.uniformText || null,
-          toNullableNumber(post.costAllowance)
-        ]
-      );
-    }
-
-    for (const equipment of payload.equipments || []) {
-      await client.query(
-        `INSERT INTO request_equipments (
-          request_id, category, equipment_name, quantity, notes
-        ) VALUES ($1, $2, $3, $4, $5)`,
-        [
-          requestId,
-          slugify(equipment.category || ""),
-          equipment.equipmentName,
-          toNullableNumber(equipment.equipmentQty),
-          equipment.equipmentNotes || null
-        ]
-      );
-    }
+    await replaceRequestStructure(client, requestId, payload);
 
     await client.query(
       `INSERT INTO request_stage_history (
@@ -1479,6 +1501,203 @@ async function createRequest(payload, session) {
     return {
       id: requestId,
       requestNumber: requestResult.rows[0].request_number
+    };
+  });
+}
+
+async function updateRequest(payload, requestId, session) {
+  const missing = validateRequestPayload(payload);
+  if (missing.length) {
+    throw new Error(`Campos obrigatorios nao preenchidos: ${missing.join(", ")}`);
+  }
+
+  return withTransaction(async (client) => {
+    const existingResult = await client.query(
+      `SELECT
+         r.id,
+         r.request_number AS "requestNumber",
+         r.client_id AS "clientId",
+         r.current_stage_id AS "currentStageId",
+         r.current_owner_user_id AS "currentOwnerUserId",
+         seller_user.email AS "sellerEmail",
+         ws.code AS "currentStageCode",
+         proposal_records.triage_owner_user_id AS "triageOwnerUserId"
+       FROM requests r
+       JOIN users seller_user ON seller_user.id = r.seller_user_id
+       JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       LEFT JOIN proposal_records ON proposal_records.request_id = r.id
+       WHERE r.id = $1`,
+      [requestId]
+    );
+
+    const existing = existingResult.rows[0];
+    if (!existing) {
+      throw new Error("Solicitacao nao encontrada.");
+    }
+
+    if (session?.role === "vendedor" && session.email) {
+      if (String(existing.sellerEmail || "").toLowerCase() !== session.email) {
+        throw new Error("Acesso negado a esta solicitacao.");
+      }
+    }
+
+    assertStageAccess(session, existing.currentStageCode, "Seu usuário não tem acesso à etapa atual desta solicitação.");
+
+    const sellerUserId = await ensureUser(client, payload.sellerName, payload.sellerEmail);
+
+    await client.query(
+      `UPDATE clients
+       SET legal_name = $2,
+           trade_name = $3,
+           cnpj = $4,
+           industry_segment = $5,
+           main_email = $6,
+           address = $7,
+           address_number = $8,
+           address_complement = $9,
+           district = $10,
+           city = $11,
+           state = $12,
+           zip_code = $13
+       WHERE id = $1`,
+      [
+        existing.clientId,
+        toUpperOrNull(payload.legalName),
+        toUpperOrNull(payload.tradeName),
+        payload.cnpj || null,
+        payload.industrySegment || null,
+        payload.mainEmail || null,
+        payload.address || null,
+        payload.addressNumber || null,
+        payload.addressComplement || null,
+        payload.district || null,
+        payload.city,
+        payload.state,
+        payload.zipCode || null
+      ]
+    );
+
+    await replaceClientContacts(client, existing.clientId, payload);
+
+    await client.query(
+      `UPDATE requests
+       SET seller_user_id = $2,
+           request_date = $3,
+           deadline_date = $4,
+           branch_name = $5,
+           lead_source = $6,
+           initial_note = $7,
+           general_notes = $8,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        requestId,
+        sellerUserId,
+        payload.requestDate,
+        payload.deadlineDate,
+        payload.branchName || null,
+        payload.leadSource || null,
+        payload.initialNote || null,
+        payload.generalNotes || null
+      ]
+    );
+
+    await replaceRequestStructure(client, requestId, payload);
+
+    await createAttachmentRecords(client, {
+      requestId,
+      uploadedByUserId: session?.userId || sellerUserId,
+      attachmentType: "anexo_inicial",
+      files: payload.initialAttachments,
+      description: "Anexos iniciais da solicitacao"
+    });
+
+    await createAttachmentRecords(client, {
+      requestId,
+      uploadedByUserId: session?.userId || sellerUserId,
+      attachmentType: "documento_tecnico_cliente",
+      files: payload.technicalDocs,
+      description: payload.technicalDocNotes || "Documentos tecnicos do cliente"
+    });
+
+    let returnedToTriage = false;
+    if (existing.currentStageCode === "aguardando_informacoes") {
+      const nextStageId = await getStageId(client, "em_triagem");
+      const nextOwnerId = existing.triageOwnerUserId || existing.currentOwnerUserId || null;
+      const responseNote =
+        payload.pendingResponseNote
+        || payload.initialNote
+        || payload.generalNotes
+        || "Correcoes enviadas pelo vendedor e devolvidas para triagem.";
+
+      await client.query(
+        `UPDATE requests
+         SET current_stage_id = $2,
+             current_owner_user_id = $3,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [requestId, nextStageId, nextOwnerId]
+      );
+
+      await client.query(
+        `UPDATE request_pending_info
+         SET responded_by_user_id = $2,
+             response_note = $3,
+             responded_at = NOW()
+         WHERE id = (
+           SELECT id
+           FROM request_pending_info
+           WHERE request_id = $1
+           ORDER BY id DESC
+           LIMIT 1
+         )`,
+        [requestId, session?.userId || sellerUserId, responseNote]
+      );
+
+      await client.query(
+        `INSERT INTO request_stage_history (
+          request_id, from_stage_id, to_stage_id, changed_by_user_id,
+          owner_user_id, entered_at, sla_deadline_at, sla_status, note
+        ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), $6, $7)`,
+        [
+          requestId,
+          existing.currentStageId,
+          nextStageId,
+          session?.userId || sellerUserId,
+          nextOwnerId,
+          "ok",
+          responseNote
+        ]
+      );
+
+      returnedToTriage = true;
+    }
+
+    await logAuditEntry(client, {
+      actor: {
+        userId: session?.userId || sellerUserId,
+        name: session?.name || payload.sellerName,
+        email: session?.email || payload.sellerEmail,
+        role: session?.role || "vendedor"
+      },
+      actionType: returnedToTriage ? "request_corrected" : "request_updated",
+      entityType: "request",
+      entityId: requestId,
+      requestId,
+      description: returnedToTriage
+        ? `Solicitacao ${existing.requestNumber} corrigida pelo vendedor e devolvida para triagem.`
+        : `Solicitacao ${existing.requestNumber} atualizada.`,
+      metadata: {
+        requestNumber: existing.requestNumber,
+        returnedToTriage,
+        currentStageCode: existing.currentStageCode
+      }
+    });
+
+    return {
+      id: requestId,
+      requestNumber: existing.requestNumber,
+      returnedToTriage
     };
   });
 }
@@ -2825,16 +3044,35 @@ async function getRequestDetailFromDb(requestId, session) {
      )
      SELECT
        r.id,
+       c.id AS "clientId",
        r.request_number AS "requestNumber",
        UPPER(c.legal_name) AS company,
+       UPPER(c.legal_name) AS "legalName",
+       UPPER(COALESCE(c.trade_name, '')) AS "tradeName",
+       c.cnpj,
+       c.industry_segment AS "industrySegment",
+       c.main_email AS "mainEmail",
+       c.address,
+       c.address_number AS "addressNumber",
+       c.address_complement AS "addressComplement",
+       c.district,
+       c.city,
+       c.state,
+       c.zip_code AS "zipCode",
        ws.code AS "stageCode",
        seller_user.email AS "sellerEmail",
        ws.name AS stage,
        ${slaStatusCase} AS "slaStatus",
        COALESCE(owner_user.name, seller_user.name) AS "currentOwner",
        seller_user.name AS seller,
+       r.branch_name AS "branchName",
+       r.lead_source AS "leadSource",
+       r.initial_note AS "initialNote",
+       r.general_notes AS "generalNotes",
        TO_CHAR(r.request_date, 'DD/MM/YYYY') AS "requestDate",
+       TO_CHAR(r.request_date, 'YYYY-MM-DD') AS "requestDateIso",
        TO_CHAR(r.deadline_date, 'DD/MM/YYYY') AS "deadlineDate",
+       TO_CHAR(r.deadline_date, 'YYYY-MM-DD') AS "deadlineDateIso",
        COALESCE(contract_records.next_action, commercial_records.next_action, latest.note, r.initial_note, 'Solicitacao em andamento') AS "nextAction",
        linked_proposal.id AS "proposalRegistryId",
        linked_proposal.proposal_number_display AS "proposalNumber",
@@ -2974,8 +3212,50 @@ async function getRequestDetailFromDb(requestId, session) {
     [requestId]
   );
 
+  const contactsResult = await query(
+    `SELECT
+       name,
+       job_title AS "jobTitle",
+       email,
+       phone,
+       is_primary AS "isPrimary"
+     FROM client_contacts
+     WHERE client_id = $1
+     ORDER BY is_primary DESC, id`,
+    [detailResult.rows[0].clientId]
+  );
+
+  const pendingInfoResult = await query(
+    `SELECT
+       pending_reason AS "pendingReason",
+       pending_description AS "pendingDescription",
+       TO_CHAR(due_date, 'YYYY-MM-DD') AS "pendingDueDate",
+       responsible_user.name AS "pendingOwnerName",
+       responsible_user.email AS "pendingOwnerEmail",
+       response_note AS "responseNote",
+       TO_CHAR(responded_at, 'YYYY-MM-DD') AS "respondedAt"
+     FROM request_pending_info rpi
+     LEFT JOIN users responsible_user ON responsible_user.id = rpi.responsible_user_id
+     WHERE rpi.request_id = $1
+     ORDER BY rpi.id DESC
+     LIMIT 1`,
+    [requestId]
+  );
+
+  const primaryContact = contactsResult.rows.find((row) => row.isPrimary) || {};
+  const secondaryContact = contactsResult.rows.find((row) => !row.isPrimary) || {};
+
   return {
     ...detailResult.rows[0],
+    primaryContactName: primaryContact.name || "",
+    primaryContactRole: primaryContact.jobTitle || "",
+    primaryContactEmail: primaryContact.email || "",
+    primaryContactPhone: primaryContact.phone || "",
+    secondaryContactName: secondaryContact.name || "",
+    secondaryContactRole: secondaryContact.jobTitle || "",
+    secondaryContactEmail: secondaryContact.email || "",
+    secondaryContactPhone: secondaryContact.phone || "",
+    pendingInfo: pendingInfoResult.rows[0] || null,
     services: servicesResult.rows,
     benefits: benefitsResult.rows,
     posts: postsResult.rows,
@@ -4454,6 +4734,28 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "PUT" && /^\/api\/requests\/\d+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
+      assertPermission(session, "createRequest", "Seu perfil nao pode atualizar solicitacoes.");
+      const requestId = Number(url.pathname.split("/").pop());
+      if (!Number.isFinite(requestId)) {
+        sendJson(response, 400, { error: "Identificador da solicitacao invalido." });
+        return;
+      }
+      const body = await readBody(request);
+      const payload = JSON.parse(body || "{}");
+      const updated = await updateRequest(payload, requestId, session);
+      sendJson(response, 200, {
+        message: updated.returnedToTriage
+          ? "Solicitação atualizada e devolvida para triagem."
+          : "Solicitação atualizada com sucesso.",
+        request: updated,
+        returnedToTriage: updated.returnedToTriage
+      });
+      return;
+    }
+
     if (request.method === "DELETE" && /^\/api\/requests\/\d+$/.test(url.pathname)) {
       assertAuthenticated(session);
       assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
@@ -4675,6 +4977,7 @@ ensurePasswordColumn()
   .then(() => ensureProposalRegistryRequestNumbers())
   .then(() => ensureNegotiationProposalBranches())
   .then(() => ensureCommercialRecordColumns())
+  .then(() => ensureRequestPendingResponseColumns())
   .then(() => ensureAuditLogTable())
   .then(() => ensureBaseAccessData())
   .then(() => {

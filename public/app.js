@@ -890,7 +890,7 @@ function defaultModulesForRole(roleName) {
 
 function defaultStageAccessForRole(roleName) {
   const defaults = {
-    vendedor: ["solicitacao_criada", "enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
+    vendedor: ["solicitacao_criada", "aguardando_informacoes", "enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
     comercial_interno: [...ALL_STAGE_CODES],
     propostas: ["em_triagem", "aguardando_informacoes", "em_preparacao_da_proposta", "proposta_finalizada"],
     juridico: ["elaboracao_de_contrato", "negociacao_de_clausulas", "contrato_assinado"],
@@ -1501,6 +1501,13 @@ function workflowViewFromStage(stageCode, fallbackView = "solicitacoes") {
   return fallbackView;
 }
 
+function preferredWorkflowView(detail, fallbackView = "solicitacoes") {
+  if (currentRole === "vendedor" && detail?.stageCode === "aguardando_informacoes") {
+    return "solicitacoes";
+  }
+  return workflowViewFromStage(detail?.stageCode, fallbackView);
+}
+
 function populateProposalForm(detail) {
   document.getElementById("selected-request-id").value = detail.id || "";
   document.getElementById("selected-request-number").value = detail.requestNumber || "";
@@ -1569,6 +1576,153 @@ function populateContractForm(detail) {
   if (!document.getElementById("contract-owner-email").value) {
     document.getElementById("contract-owner-email").value = currentUser.email;
   }
+}
+
+function setCheckedValues(name, values = []) {
+  const normalized = new Set((values || []).map((item) => String(item || "").trim().toLowerCase()));
+  document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+    input.checked = normalized.has(String(input.value || "").trim().toLowerCase());
+  });
+}
+
+function clearTableBodyRows(tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  if (tbody) tbody.innerHTML = "";
+}
+
+function populatePostRows(posts = []) {
+  clearTableBodyRows("post-rows");
+  if (!posts.length) {
+    createPostRow();
+    return;
+  }
+
+  posts.forEach((item) => {
+    createPostRow();
+    const row = document.querySelector("#post-rows tr:last-child");
+    const fields = row.querySelectorAll("input, select");
+    fields[0].value = item.postType || "";
+    fields[1].value = item.qtyPosts ?? item.postQty ?? "";
+    fields[2].value = item.qtyWorkers ?? item.workerQty ?? "";
+    fields[3].value = item.functionName || "";
+    fields[4].value = item.workScale || "";
+    fields[5].value = item.startTime || "";
+    fields[6].value = item.endTime || "";
+    fields[7].value = item.saturdayTime || "";
+    fields[8].value = item.holidayFlag || "";
+    fields[9].value = item.indemnifiedFlag || "";
+    fields[10].value = item.uniformText || "";
+    fields[11].value = item.costAllowanceValue ?? item.costAllowance ?? "";
+  });
+}
+
+function populateEquipmentRows(equipments = []) {
+  clearTableBodyRows("equipment-rows");
+  if (!equipments.length) {
+    createEquipmentRow();
+    return;
+  }
+
+  equipments.forEach((item) => {
+    createEquipmentRow();
+    const row = document.querySelector("#equipment-rows tr:last-child");
+    const fields = row.querySelectorAll("input, select");
+    fields[0].value = item.category || "";
+    fields[1].value = item.equipmentName || "";
+    fields[2].value = item.quantity ?? item.equipmentQty ?? "";
+    fields[3].value = item.notes ?? item.equipmentNotes ?? "";
+  });
+}
+
+function renderPendingRequestBlock(detail) {
+  const block = document.getElementById("request-pending-block");
+  const summary = document.getElementById("request-pending-summary");
+  const responseNote = document.getElementById("request-pending-response-note");
+  const pendingInfo = detail?.pendingInfo;
+  const shouldShow = detail?.stageCode === "aguardando_informacoes" && pendingInfo;
+
+  block.hidden = !shouldShow;
+  if (!shouldShow) {
+    summary.textContent = "";
+    responseNote.value = "";
+    return;
+  }
+
+  summary.textContent = `Motivo: ${pendingInfo.pendingReason || "-"}
+Detalhamento: ${pendingInfo.pendingDescription || "-"}
+Responsável pela devolução: ${pendingInfo.pendingOwnerName || "-"}
+Prazo da resposta: ${pendingInfo.pendingDueDate || "-"}
+Última resposta registrada: ${pendingInfo.responseNote || "-"}
+Respondido em: ${pendingInfo.respondedAt || "-"}`;
+  responseNote.value = pendingInfo.responseNote || "";
+}
+
+function resetRequestForm() {
+  const form = document.getElementById("request-form");
+  form.reset();
+  document.getElementById("request-id").value = "";
+  document.getElementById("request-form-preview").textContent = "";
+  document.getElementById("save-request-button").textContent = "Salvar solicitacao";
+  renderPendingRequestBlock(null);
+  setCheckedValues("serviceType", []);
+  setCheckedValues("transportOption", []);
+  clearTableBodyRows("post-rows");
+  clearTableBodyRows("equipment-rows");
+  createPostRow();
+  createEquipmentRow();
+  syncLoggedUserIntoForms();
+}
+
+function populateRequestForm(detail) {
+  document.getElementById("request-id").value = detail.id || "";
+  document.getElementById("request-date").value = detail.requestDateIso || "";
+  document.getElementById("deadline-date").value = detail.deadlineDateIso || "";
+  document.getElementById("seller-name").value = detail.seller || currentUser.name || "";
+  document.getElementById("seller-email").value = detail.sellerEmail || currentUser.email || "";
+  document.getElementById("branch-name").value = detail.branchName || "";
+  document.getElementById("lead-source").value = detail.leadSource || "";
+  document.getElementById("initial-note").value = detail.initialNote || "";
+  document.getElementById("legal-name").value = detail.legalName || "";
+  document.getElementById("trade-name").value = detail.tradeName || "";
+  document.getElementById("cnpj").value = detail.cnpj || "";
+  document.getElementById("industry-segment").value = detail.industrySegment || "";
+  document.getElementById("main-email").value = detail.mainEmail || "";
+  document.getElementById("address").value = detail.address || "";
+  document.getElementById("address-number").value = detail.addressNumber || "";
+  document.getElementById("address-complement").value = detail.addressComplement || "";
+  document.getElementById("district").value = detail.district || "";
+  document.getElementById("city").value = detail.city || "";
+  document.getElementById("state").value = detail.state || "";
+  document.getElementById("zip-code").value = detail.zipCode || "";
+  document.getElementById("primary-contact-name").value = detail.primaryContactName || "";
+  document.getElementById("primary-contact-role").value = detail.primaryContactRole || "";
+  document.getElementById("primary-contact-email").value = detail.primaryContactEmail || "";
+  document.getElementById("primary-contact-phone").value = detail.primaryContactPhone || "";
+  document.getElementById("secondary-contact-name").value = detail.secondaryContactName || "";
+  document.getElementById("secondary-contact-role").value = detail.secondaryContactRole || "";
+  document.getElementById("secondary-contact-email").value = detail.secondaryContactEmail || "";
+  document.getElementById("secondary-contact-phone").value = detail.secondaryContactPhone || "";
+  document.getElementById("transport-region").value = detail.benefits?.find((item) => item.benefitType === "vale_transporte")?.regionValue || "18,00";
+  document.getElementById("transport-notes").value = detail.benefits?.find((item) => item.benefitType === "vale_transporte")?.notes || "";
+  document.getElementById("medical-notes").value = detail.benefits?.find((item) => item.benefitType === "assistencia_medica")?.notes || "";
+  document.getElementById("meal-notes").value = detail.benefits?.find((item) => item.benefitType === "vr")?.notes || "";
+  document.getElementById("food-notes").value = detail.benefits?.find((item) => item.benefitType === "va")?.notes || "";
+  document.getElementById("general-notes").value = detail.generalNotes || "";
+  document.getElementById("technical-doc-notes").value = detail.technicalDocNotes || "";
+  document.getElementById("save-request-button").textContent = detail.stageCode === "aguardando_informacoes"
+    ? "Salvar correções e devolver para triagem"
+    : "Salvar solicitacao";
+
+  setCheckedValues("serviceType", (detail.services || []).map((item) => item.serviceType));
+  setCheckedValues(
+    "transportOption",
+    (detail.benefits || [])
+      .filter((item) => item.benefitType === "vale_transporte" && item.optionLabel)
+      .map((item) => item.optionLabel)
+  );
+  populatePostRows(detail.posts || []);
+  populateEquipmentRows(detail.equipments || []);
+  renderPendingRequestBlock(detail);
 }
 
 function buildProposalPayload() {
@@ -1782,6 +1936,7 @@ async function buildRequestPayload() {
   }).filter((item) => Object.values(item).some(Boolean));
 
   return {
+    requestId: data.get("requestId"),
     requestDate: data.get("requestDate"),
     deadlineDate: data.get("deadlineDate"),
     sellerName: data.get("sellerName"),
@@ -1820,6 +1975,7 @@ async function buildRequestPayload() {
     equipments,
     generalNotes: data.get("generalNotes"),
     technicalDocNotes: data.get("technicalDocNotes"),
+    pendingResponseNote: data.get("pendingResponseNote"),
     initialAttachments: await collectFiles("initial-attachments"),
     technicalDocs: await collectFiles("technical-docs")
   };
@@ -2086,6 +2242,8 @@ function setupRequestForm() {
   });
   document.getElementById("go-to-request-form").addEventListener("click", () => {
     setActiveView("solicitacoes");
+    resetRequestForm();
+    updateRequestDeleteButton(null);
     document.getElementById("request-form-section").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   document.getElementById("delete-request-button").addEventListener("click", async () => {
@@ -2337,6 +2495,7 @@ async function loadAuthenticatedAppData() {
   renderAttachmentList("proposal-attachments", initialAttachments, ["anexo_inicial", "documento_tecnico_cliente"]);
   renderAttachmentList("commercial-attachments", initialAttachments, ["proposta_final_pdf", "anexo_aceite"]);
   await renderRequestFormPreview();
+  populateRequestForm(initialDetail);
   resetProposalNumberForm();
   populateProposalForm(initialDetail);
   populateCommercialForm(initialDetail);
@@ -2356,6 +2515,7 @@ async function selectRequest(requestId) {
   renderHistory(detail.history || []);
   renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente"]);
   renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_aceite"]);
+  populateRequestForm(detail);
   populateProposalForm(detail);
   populateCommercialForm(detail);
   populateContractForm(detail);
@@ -2384,7 +2544,7 @@ async function bootstrap() {
 
       try {
         const detail = await selectRequest(row.dataset.requestId);
-        setActiveView(workflowViewFromStage(detail.stageCode, "solicitacoes"));
+        setActiveView(preferredWorkflowView(detail, "solicitacoes"));
       } catch (error) {
         alert(`Nao foi possivel carregar a ficha da solicitacao: ${error.message}`);
       }
@@ -2449,7 +2609,7 @@ async function bootstrap() {
       try {
         const moduleKey = stageRow.dataset.moduleKey || currentView;
         const detail = await selectRequest(stageRow.dataset.requestId);
-        const targetView = workflowViewFromStage(detail.stageCode, moduleKey);
+        const targetView = preferredWorkflowView(detail, moduleKey);
         setActiveView(targetView);
         scrollToWorkflowForm(targetView);
       } catch (error) {
@@ -2562,8 +2722,11 @@ async function bootstrap() {
     }
 
     try {
-      const response = await fetchWithSession("/api/requests", {
-        method: "POST",
+      const requestId = Number(payload.requestId || 0);
+      const isEditing = Number.isFinite(requestId) && requestId > 0;
+      const targetUrl = isEditing ? `/api/requests/${requestId}` : "/api/requests";
+      const response = await fetchWithSession(targetUrl, {
+        method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
@@ -2581,11 +2744,24 @@ async function bootstrap() {
       renderAllStageBoards(reportRowsCache);
       const detailId = result.request?.id || refreshed[0]?.id;
 
-      if (detailId) {
+      if (result.returnedToTriage) {
+        selectedRequestId = null;
+        updateRequestDeleteButton(null);
+        renderDetail(requestDetailFallback());
+        renderHistory([]);
+        renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
+        renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_aceite"]);
+        resetRequestForm();
+        populateProposalForm(requestDetailFallback());
+        populateCommercialForm(requestDetailFallback());
+        populateContractForm(requestDetailFallback());
+        populateProposalNumberLinkedRequest(null);
+        setActiveView("solicitacoes");
+      } else if (detailId) {
         await selectRequest(detailId);
       }
 
-      alert(`Solicitacao salva com sucesso: ${savedNumber}`);
+      alert(result.message || `Solicitacao salva com sucesso: ${savedNumber}`);
     } catch (error) {
       alert(`Nao foi possivel salvar a solicitacao: ${error.message}`);
     }

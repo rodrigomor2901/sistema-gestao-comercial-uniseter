@@ -932,6 +932,7 @@
         </div>
 
         <form id="request-form" class="form-layout">
+          <input id="request-id" name="requestId" type="hidden" />
           <div class="form-block">
             <h3>Dados da solicitacao</h3>
             <div class="form-grid">
@@ -962,6 +963,20 @@
               <div class="control control-span-3">
                 <label for="initial-note">Observacao inicial da demanda</label>
                 <textarea id="initial-note" name="initialNote"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div id="request-pending-block" class="form-block" hidden>
+            <div class="section-head">
+              <h3>Correção solicitada</h3>
+              <span>Informações devolvidas pela triagem para ajuste do vendedor</span>
+            </div>
+            <div id="request-pending-summary" class="preview-box"></div>
+            <div class="form-grid">
+              <div class="control control-span-4">
+                <label for="request-pending-response-note">Observações da correção realizada</label>
+                <textarea id="request-pending-response-note" name="pendingResponseNote" placeholder="Descreva o que foi corrigido antes de devolver para triagem."></textarea>
               </div>
             </div>
           </div>
@@ -1183,7 +1198,7 @@
           <div class="button-row">
             <button type="button" class="secondary" id="preview-request-form">Gerar resumo</button>
             <button type="button" class="secondary danger" id="delete-request-button" style="display:none;">Excluir solicitacao</button>
-            <button type="submit" class="primary">Salvar solicitacao</button>
+            <button id="save-request-button" type="submit" class="primary">Salvar solicitacao</button>
           </div>
         </form>
 
