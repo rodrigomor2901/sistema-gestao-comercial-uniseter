@@ -1,4 +1,4 @@
-function toneClass(value) {
+﻿function toneClass(value) {
   const normalized = String(value || "").toLowerCase();
   if (normalized.includes("venc")) return "danger";
   if (normalized.includes("risco") || normalized.includes("hoje")) return "warn";
@@ -15,25 +15,25 @@ const VIEW_CONFIG = {
   },
   funil_vendas: {
     title: "Funil de vendas",
-    subtitle: "Visão executiva do pipeline comercial, probabilidade, entrada e fechamento.",
+    subtitle: "VisÃ£o executiva do pipeline comercial, probabilidade, entrada e fechamento.",
     showExport: true,
     showNewRequest: false
   },
   proposta_todas: {
     title: "Todas as propostas",
-    subtitle: "Consulta do histórico, resumo geral, upload de arquivo e exportação.",
+    subtitle: "Consulta do histÃ³rico, resumo geral, upload de arquivo e exportaÃ§Ã£o.",
     showExport: false,
     showNewRequest: false
   },
   proposta_crm: {
-    title: "Requisições CRM",
+    title: "Requisições",
     subtitle: "Requisições sem número de proposta, prontas para gerar o cadastro.",
     showExport: false,
     showNewRequest: false
   },
   solicitacoes: {
-    title: "Solicitações",
-    subtitle: "Abertura da requisição e acompanhamento das etapas iniciais.",
+    title: "SolicitaÃ§Ãµes",
+    subtitle: "Abertura da requisiÃ§Ã£o e acompanhamento das etapas iniciais.",
     showExport: false,
     showNewRequest: true
   },
@@ -44,20 +44,20 @@ const VIEW_CONFIG = {
     showNewRequest: false
   },
   negociacoes: {
-    title: "Negociações",
+    title: "NegociaÃ§Ãµes",
     subtitle: "Envio ao vendedor, andamento comercial e aceite da proposta.",
     showExport: false,
     showNewRequest: false
   },
   contratos: {
     title: "Contratos",
-    subtitle: "Formalização contratual, cláusulas e assinatura.",
+    subtitle: "FormalizaÃ§Ã£o contratual, clÃ¡usulas e assinatura.",
     showExport: false,
     showNewRequest: false
   },
   relatorios: {
-    title: "Relatórios",
-    subtitle: "Filtros operacionais e exportação compatível com Excel.",
+    title: "RelatÃ³rios",
+    subtitle: "Filtros operacionais e exportaÃ§Ã£o compatÃ­vel com Excel.",
     showExport: true,
     showNewRequest: false
   },
@@ -68,8 +68,8 @@ const VIEW_CONFIG = {
     showNewRequest: false
   },
   admin_users: {
-    title: "Administrar usuários",
-    subtitle: "Cadastro, alteração de acesso e controle de perfis.",
+    title: "Administrar usuÃ¡rios",
+    subtitle: "Cadastro, alteraÃ§Ã£o de acesso e controle de perfis.",
     showExport: false,
     showNewRequest: false
   }
@@ -203,13 +203,13 @@ const ROLE_CONFIG = {
 const VIEW_MODULE_MAP = {
   proposta_todas: "proposta",
   proposta_crm: "proposta",
-  dashboard: "crm",
-  funil_vendas: "crm",
-  solicitacoes: "crm",
-  propostas: "crm",
-  negociacoes: "crm",
-  contratos: "crm",
-  relatorios: "crm",
+  dashboard: "vendas",
+  funil_vendas: "vendas",
+  solicitacoes: "vendas",
+  propostas: "vendas",
+  negociacoes: "vendas",
+  contratos: "contratos",
+  relatorios: "relatorios",
   admin_users: "admin"
 };
 
@@ -221,7 +221,7 @@ let currentUser = {
   name: "",
   email: "",
   roles: [],
-  moduleAccess: ["crm"],
+  moduleAccess: ["vendas"],
   mustChangePassword: false
 };
 let forcePasswordChange = false;
@@ -350,7 +350,7 @@ function renderExecutiveBars(containerId, items, quantityLabel, totalLabel) {
 function renderSalesClosingList(items) {
   const container = document.getElementById("sales-closing-list");
   if (!items?.length) {
-    container.innerHTML = `<div class="muted">Nenhuma oportunidade com previsão próxima.</div>`;
+    container.innerHTML = `<div class="muted">Nenhuma oportunidade com previsÃ£o prÃ³xima.</div>`;
     return;
   }
 
@@ -382,10 +382,10 @@ function renderSalesClosingListDetailed(items) {
       </div>
       <div>${item.requestNumber}${item.proposalNumber ? ` | ${item.proposalNumber}` : ""}</div>
       <div class="muted"><strong>Vendedor:</strong> ${item.seller || "-"}</div>
-      <div class="muted"><strong>Tipo de serviço:</strong> ${item.serviceScope || "-"}</div>
+      <div class="muted"><strong>Tipo de serviÃ§o:</strong> ${item.serviceScope || "-"}</div>
       <div class="muted"><strong>Valor:</strong> ${item.value || "-"}</div>
       <div class="muted"><strong>Margem:</strong> ${item.margin || "-"}</div>
-      <div class="muted"><strong>Previsão:</strong> ${item.expectedCloseDate || "-"}</div>
+      <div class="muted"><strong>PrevisÃ£o:</strong> ${item.expectedCloseDate || "-"}</div>
     </div>
   `).join("");
 }
@@ -469,7 +469,7 @@ function renderProposalSummary(item) {
     ["Data", item.proposalIssueDate || "-"],
     ["Status", item.proposalStatus || "-"],
     ["Valor", item.proposalValue || "-"],
-    ["Responsável pelo negócio", item.proposalManager || "-"]
+    ["ResponsÃ¡vel pelo negÃ³cio", item.proposalManager || "-"]
   ];
 
   card.style.display = "";
@@ -517,7 +517,7 @@ function renderProposalNumbers(items) {
   const summary = document.getElementById("proposal-numbers-summary");
   const importedCount = items.filter((item) => item.importedFromLegacy).length;
   const latest = items[0]?.proposalNumberDisplay || "-";
-  summary.textContent = `${items.length} número(s) | último: ${latest} | histórico: ${importedCount}`;
+  summary.textContent = `${items.length} nÃºmero(s) | Ãºltimo: ${latest} | histÃ³rico: ${importedCount}`;
 
   if (!items.length) {
     container.innerHTML = `
@@ -641,7 +641,7 @@ function renderProposalNumberMetrics(allItems, filteredItems) {
 
   const cards = [
     { label: "Total de propostas", value: String(allItems.length), note: `${currentMonthCount} neste mes`, tone: "info" },
-    { label: "Volume total", value: formatCurrency(totalValue), note: "histórico completo", tone: "ok" },
+    { label: "Volume total", value: formatCurrency(totalValue), note: "histÃ³rico completo", tone: "ok" },
     { label: "Margem media", value: `${avgBdi.toFixed(1).replace(".", ",")}%`, note: "BDI medio geral", tone: "warn" },
     { label: "Filtro atual", value: String(filteredItems.length), note: filteredItems.length ? formatCurrency(filteredValue) : "sem filtros aplicados", tone: "info" }
   ];
@@ -852,15 +852,27 @@ function rolePermissions(roleName) {
 
 function defaultModulesForRole(roleName) {
   const defaults = {
-    vendedor: ["proposta", "crm"],
-    comercial_interno: ["proposta", "crm"],
-    propostas: ["proposta", "crm"],
-    juridico: ["crm"],
-    gestor: ["proposta", "crm"],
-    diretoria: ["proposta", "crm"],
-    administrador: ["proposta", "crm", "admin"]
+    vendedor: ["proposta", "vendas", "relatorios"],
+    comercial_interno: ["proposta", "vendas", "contratos", "relatorios"],
+    propostas: ["proposta", "vendas", "relatorios"],
+    juridico: ["vendas", "contratos", "relatorios"],
+    gestor: ["proposta", "vendas", "contratos", "relatorios"],
+    diretoria: ["proposta", "vendas", "contratos", "relatorios"],
+    administrador: ["proposta", "vendas", "contratos", "relatorios", "admin"]
   };
-  return defaults[roleName] || ["crm"];
+  return defaults[roleName] || ["vendas"];
+}
+
+function expandLegacyModules(modules = []) {
+  const expanded = [];
+  modules.forEach((moduleName) => {
+    if (moduleName === "crm") {
+      expanded.push("vendas", "contratos", "relatorios");
+      return;
+    }
+    expanded.push(moduleName);
+  });
+  return [...new Set(expanded)];
 }
 
 function applyAdminModuleSelection(modules = []) {
@@ -872,18 +884,18 @@ function applyAdminModuleSelection(modules = []) {
 function isViewAllowedByModule(view, moduleAccess = currentUser.moduleAccess || []) {
   const requiredModule = VIEW_MODULE_MAP[view];
   if (!requiredModule) return true;
-  return moduleAccess.includes(requiredModule);
+  return expandLegacyModules(moduleAccess).includes(requiredModule);
 }
 
 function renderAdminUsers(users) {
   const container = document.getElementById("admin-users-table");
   const summary = document.getElementById("admin-users-summary");
-  summary.textContent = `${users.length} usuário(s)`;
+  summary.textContent = `${users.length} usuÃ¡rio(s)`;
 
   if (!users.length) {
     container.innerHTML = `
       <tr>
-        <td colspan="5" class="muted">Nenhum usuário cadastrado.</td>
+        <td colspan="5" class="muted">Nenhum usuÃ¡rio cadastrado.</td>
       </tr>
     `;
     return;
@@ -1095,7 +1107,7 @@ function applyRoleAccess(roleKey) {
   setActiveView(currentView);
   if (permissions.manageUsers) {
     loadAdminModule().catch((error) => {
-      alert(`Não foi possível carregar a administração de usuários: ${error.message}`);
+      alert(`NÃ£o foi possÃ­vel carregar a administraÃ§Ã£o de usuÃ¡rios: ${error.message}`);
     });
   }
 }
@@ -1186,7 +1198,7 @@ function renderDetail(item) {
     ["Empresa", item.company],
     ["Etapa atual", item.stage],
     ["SLA", item.slaStatus],
-    ["Responsável atual", item.currentOwner],
+    ["ResponsÃ¡vel atual", item.currentOwner],
     ["Vendedor", item.seller],
     ["Data da solicitacao", item.requestDate],
     ["Prazo", item.deadlineDate],
@@ -1247,12 +1259,12 @@ function renderProposalOnlyContext(detail) {
     proposalStatus: detail.status || "-",
     proposalManager: detail.manager || detail.seller || "-",
     proposalValue,
-    nextAction: detail.commercialNextAction || detail.nextAction || detail.commercialAcceptedNote || detail.notes || "Negócio histórico em andamento"
+    nextAction: detail.commercialNextAction || detail.nextAction || detail.commercialAcceptedNote || detail.notes || "NegÃ³cio histÃ³rico em andamento"
   });
 
   const history = [
     {
-      title: detail.stage || "Negócio histórico",
+      title: detail.stage || "NegÃ³cio histÃ³rico",
       meta: `${detail.issueDate || "-"} - ${detail.manager || detail.seller || "Sistema"}`,
       note: detail.notes || "Registro importado para acompanhamento comercial."
     }
@@ -1480,8 +1492,8 @@ function buildProposalPayload() {
 function validateProposalPayload(payload) {
   const missing = [];
   if (!payload.requestId && !payload.proposalRegistryId) missing.push("Selecione uma solicitacao ou proposta");
-  if (!payload.triageOwnerName) missing.push("Responsável pela triagem");
-  if (!payload.triageOwnerEmail) missing.push("Email do responsável");
+  if (!payload.triageOwnerName) missing.push("ResponsÃ¡vel pela triagem");
+  if (!payload.triageOwnerEmail) missing.push("Email do responsÃ¡vel");
   if (!payload.triageStatus) missing.push("Status da triagem");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
   return missing;
@@ -1517,7 +1529,7 @@ function buildCommercialPayload() {
 function validateCommercialPayload(payload) {
   const missing = [];
   if (!payload.requestId && !payload.proposalRegistryId) missing.push("Selecione uma solicitacao ou proposta");
-  if (!payload.sellerName) missing.push("Vendedor responsável");
+  if (!payload.sellerName) missing.push("Vendedor responsÃ¡vel");
   if (!payload.sellerEmail) missing.push("Email do vendedor");
   if (!payload.negotiationStatus) missing.push("Status da negociacao");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
@@ -1549,8 +1561,8 @@ function buildContractPayload() {
 function validateContractPayload(payload) {
   const missing = [];
   if (!payload.requestId) missing.push("Selecione uma solicitacao");
-  if (!payload.contractOwnerName) missing.push("Responsável pelo contrato");
-  if (!payload.contractOwnerEmail) missing.push("Email do responsável");
+  if (!payload.contractOwnerName) missing.push("ResponsÃ¡vel pelo contrato");
+  if (!payload.contractOwnerEmail) missing.push("Email do responsÃ¡vel");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
   return missing;
 }
@@ -1711,7 +1723,7 @@ function validateRequestPayload(payload) {
 
   if (!payload.requestDate) missing.push("Data da solicitacao");
   if (!payload.deadlineDate) missing.push("Prazo de entrega");
-  if (!payload.sellerName) missing.push("Vendedor responsável");
+  if (!payload.sellerName) missing.push("Vendedor responsÃ¡vel");
   if (!payload.sellerEmail) missing.push("Email do vendedor");
   if (!payload.legalName) missing.push("Razao social");
   if (!payload.city) missing.push("Cidade");
@@ -1883,7 +1895,7 @@ async function buildProposalNumberPayload() {
 function validateProposalNumberPayload(payload) {
   const missing = [];
   if (!payload.issueDate) missing.push("Data");
-  if (!payload.managerName) missing.push("Responsável pelo negócio");
+  if (!payload.managerName) missing.push("ResponsÃ¡vel pelo negÃ³cio");
   if (!payload.clientName && !payload.requestId) missing.push("Cliente ou solicitacao vinculada");
   return missing;
 }
@@ -1913,7 +1925,7 @@ function applyAuthenticatedUser(user) {
     name: user.name,
     email: user.email,
     roles: user.roles || [],
-    moduleAccess: user.moduleAccess || ["crm"],
+    moduleAccess: user.moduleAccess || ["vendas"],
     mustChangePassword: Boolean(user.mustChangePassword)
   };
   forcePasswordChange = Boolean(user.mustChangePassword);
@@ -1923,7 +1935,7 @@ function applyAuthenticatedUser(user) {
   applyRoleAccess(currentRole);
   if (forcePasswordChange) {
     const feedback = document.getElementById("change-password-feedback");
-    feedback.textContent = "Senha provisória detectada. Troque sua senha para continuar.";
+    feedback.textContent = "Senha provisÃ³ria detectada. Troque sua senha para continuar.";
     setActiveView("alterar_senha");
   }
 }
@@ -2041,7 +2053,7 @@ function setupRequestForm() {
     try {
       await refreshProposalNumbers();
     } catch (error) {
-      alert(`Não foi possível carregar o histórico de números: ${error.message}`);
+      alert(`NÃ£o foi possÃ­vel carregar o histÃ³rico de nÃºmeros: ${error.message}`);
     }
   });
   document.getElementById("clear-proposal-number-filters").addEventListener("click", async () => {
@@ -2049,7 +2061,7 @@ function setupRequestForm() {
     try {
       await refreshProposalNumbers();
     } catch (error) {
-      alert(`Não foi possível limpar os filtros do módulo: ${error.message}`);
+      alert(`NÃ£o foi possÃ­vel limpar os filtros do mÃ³dulo: ${error.message}`);
     }
   });
   document.getElementById("proposal-crm-filters").addEventListener("submit", async (event) => {
@@ -2057,7 +2069,7 @@ function setupRequestForm() {
     try {
       await refreshCrmProposalRequests();
     } catch (error) {
-      alert(`Não foi possível carregar as requisições CRM: ${error.message}`);
+      alert(`Não foi possível carregar as requisições: ${error.message}`);
     }
   });
   document.getElementById("clear-proposal-crm-filters").addEventListener("click", async () => {
@@ -2065,7 +2077,7 @@ function setupRequestForm() {
     try {
       await refreshCrmProposalRequests();
     } catch (error) {
-      alert(`Não foi possível limpar os filtros das requisições CRM: ${error.message}`);
+      alert(`Não foi possível limpar os filtros das requisições: ${error.message}`);
     }
   });
   document.getElementById("negotiations-filters").addEventListener("submit", (event) => {
@@ -2439,7 +2451,7 @@ async function bootstrap() {
         scrollToWorkflowForm("negociacoes");
       }
     } catch (error) {
-      alert(`Nao foi possivel abrir a negociação: ${error.message}`);
+      alert(`Nao foi possivel abrir a negociaÃ§Ã£o: ${error.message}`);
     }
   });
 
@@ -2677,7 +2689,7 @@ async function bootstrap() {
     const registryId = document.getElementById("proposal-number-registry-id").value;
     if (!registryId) return;
 
-    const confirmed = window.confirm("Deseja excluir este número de proposta? A requisição vinculada voltará para a aba Requisições CRM.");
+    const confirmed = window.confirm("Deseja excluir este número de proposta? A requisição vinculada voltará para a aba Requisições.");
     if (!confirmed) return;
 
     try {
@@ -2767,7 +2779,7 @@ async function bootstrap() {
   document.getElementById("admin-user-deactivate").addEventListener("click", async () => {
     const userId = document.getElementById("admin-user-id").value;
     if (!userId) {
-      alert("Selecione um usuário para desativar.");
+      alert("Selecione um usuÃ¡rio para desativar.");
       return;
     }
 
@@ -2777,14 +2789,14 @@ async function bootstrap() {
       });
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Falha ao desativar usuário.");
+        throw new Error(result.error || "Falha ao desativar usuÃ¡rio.");
       }
 
       await loadAdminModule();
       resetAdminUserForm();
-      alert(result.message || "Usuário desativado com sucesso.");
+      alert(result.message || "UsuÃ¡rio desativado com sucesso.");
     } catch (error) {
-      alert(`Não foi possível desativar o usuário: ${error.message}`);
+      alert(`NÃ£o foi possÃ­vel desativar o usuÃ¡rio: ${error.message}`);
     }
   });
 
@@ -2812,12 +2824,12 @@ async function bootstrap() {
     };
 
     if (!payload.name || !payload.email || !payload.role) {
-      alert("Preencha nome, e-mail e perfil do usuário.");
+      alert("Preencha nome, e-mail e perfil do usuÃ¡rio.");
       return;
     }
 
     if (!userId && !passwordValue) {
-      alert("Informe uma senha provisória para criar o novo usuário.");
+      alert("Informe uma senha provisÃ³ria para criar o novo usuÃ¡rio.");
       return;
     }
 
@@ -2829,25 +2841,25 @@ async function bootstrap() {
       });
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Falha ao salvar usuário.");
+        throw new Error(result.error || "Falha ao salvar usuÃ¡rio.");
       }
 
       await loadAdminModule();
       await loadAuthenticatedAppData();
       resetAdminUserForm();
       const successMessage = result.temporaryPassword
-        ? `${result.message || "Usuário salvo com sucesso."}\nSenha provisória: ${result.temporaryPassword}`
-        : (result.message || "Usuário salvo com sucesso.");
+        ? `${result.message || "UsuÃ¡rio salvo com sucesso."}\nSenha provisÃ³ria: ${result.temporaryPassword}`
+        : (result.message || "UsuÃ¡rio salvo com sucesso.");
       alert(successMessage);
     } catch (error) {
-      alert(`Não foi possível salvar o usuário: ${error.message}`);
+      alert(`NÃ£o foi possÃ­vel salvar o usuÃ¡rio: ${error.message}`);
     }
   });
 }
 
 bootstrap().catch((error) => {
   console.error(error);
-  document.body.innerHTML = `<pre style="padding:24px">Erro ao carregar a aplicação: ${error.message}</pre>`;
+  document.body.innerHTML = `<pre style="padding:24px">Erro ao carregar a aplicaÃ§Ã£o: ${error.message}</pre>`;
 });
 
 function requestDetailFallback() {
@@ -2864,3 +2876,5 @@ function requestDetailFallback() {
     history: []
   };
 }
+
+

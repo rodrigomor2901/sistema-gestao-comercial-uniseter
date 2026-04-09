@@ -68,7 +68,7 @@ const CANCEL_REASON_OPTIONS = [
   "Dados insuficientes para continuidade",
   "Demanda cancelada internamente"
 ];
-const MODULE_OPTIONS = ["proposta", "crm", "admin"];
+const MODULE_OPTIONS = ["proposta", "vendas", "contratos", "relatorios", "admin"];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -330,7 +330,7 @@ function createSession(user) {
     email: String(user.email || "").toLowerCase(),
     roles: user.roles || [],
     primaryRole: user.primaryRole || user.roles?.[0] || "vendedor",
-    moduleAccess: user.moduleAccess || ["crm"],
+    moduleAccess: user.moduleAccess || ["vendas"],
     mustChangePassword: Boolean(user.mustChangePassword),
     expiresAt
   });
@@ -351,16 +351,16 @@ sessionCleanupTimer.unref();
 
 function defaultModulesForRole(roleName) {
   const defaults = {
-    vendedor: ["proposta", "crm"],
-    comercial_interno: ["proposta", "crm"],
-    propostas: ["proposta", "crm"],
-    juridico: ["crm"],
-    gestor: ["proposta", "crm"],
-    diretoria: ["proposta", "crm"],
-    administrador: ["proposta", "crm", "admin"]
+    vendedor: ["proposta", "vendas", "relatorios"],
+    comercial_interno: ["proposta", "vendas", "contratos", "relatorios"],
+    propostas: ["proposta", "vendas", "relatorios"],
+    juridico: ["vendas", "contratos", "relatorios"],
+    gestor: ["proposta", "vendas", "contratos", "relatorios"],
+    diretoria: ["proposta", "vendas", "contratos", "relatorios"],
+    administrador: ["proposta", "vendas", "contratos", "relatorios", "admin"]
   };
 
-  return defaults[roleName] || ["crm"];
+  return defaults[roleName] || ["vendas"];
 }
 
 function normalizeModuleAccess(moduleAccess, roleName) {
@@ -371,7 +371,13 @@ function normalizeModuleAccess(moduleAccess, roleName) {
         .map((item) => item.trim())
         .filter(Boolean);
 
-  const normalized = [...new Set(base.filter((item) => MODULE_OPTIONS.includes(item)))];
+  const expanded = base.flatMap((item) => {
+    if (item === "crm") {
+      return ["vendas", "contratos", "relatorios"];
+    }
+    return [item];
+  });
+  const normalized = [...new Set(expanded.filter((item) => MODULE_OPTIONS.includes(item)))];
   return normalized.length ? normalized : defaultModulesForRole(roleName);
 }
 
