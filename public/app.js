@@ -1502,7 +1502,7 @@ function workflowViewFromStage(stageCode, fallbackView = "solicitacoes") {
 }
 
 function preferredWorkflowView(detail, fallbackView = "solicitacoes") {
-  if (currentRole === "vendedor" && detail?.stageCode === "aguardando_informacoes") {
+  if (detail?.stageCode === "aguardando_informacoes") {
     return "solicitacoes";
   }
   return workflowViewFromStage(detail?.stageCode, fallbackView);
