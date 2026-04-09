@@ -1552,9 +1552,10 @@ async function deleteRequest(requestId, session) {
       actionType: "request_deleted",
       entityType: "request",
       entityId: requestId,
-      requestId,
+      requestId: null,
       description: `Solicitacao ${requestResult.rows[0].request_number} excluida.`,
       metadata: {
+        deletedRequestId: requestId,
         requestNumber: requestResult.rows[0].request_number
       }
     });
