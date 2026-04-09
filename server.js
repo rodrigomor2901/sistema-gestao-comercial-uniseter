@@ -69,6 +69,21 @@ const CANCEL_REASON_OPTIONS = [
   "Demanda cancelada internamente"
 ];
 const MODULE_OPTIONS = ["proposta", "vendas", "contratos", "relatorios", "admin"];
+const WORKFLOW_STAGE_OPTIONS = [
+  "solicitacao_criada",
+  "em_triagem",
+  "aguardando_informacoes",
+  "em_preparacao_da_proposta",
+  "proposta_finalizada",
+  "enviada_ao_vendedor",
+  "em_negociacao",
+  "proposta_aceita",
+  "perdida",
+  "cancelada",
+  "elaboracao_de_contrato",
+  "negociacao_de_clausulas",
+  "contrato_assinado"
+];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -123,6 +138,7 @@ function getSessionContext(request, url) {
     roles: sessionFromToken?.roles || [],
     role: String(sessionFromToken?.primaryRole || headerRole || url.searchParams.get("sessionRole") || ""),
     moduleAccess: sessionFromToken?.moduleAccess || [],
+    stageAccess: sessionFromToken?.stageAccess || [],
     mustChangePassword: Boolean(sessionFromToken?.mustChangePassword),
     email: String(sessionFromToken?.email || headerEmail || url.searchParams.get("sessionEmail") || "").trim().toLowerCase(),
     name: String(sessionFromToken?.name || headerName || url.searchParams.get("sessionName") || "").trim(),
@@ -245,6 +261,62 @@ function hasModuleAccess(session, moduleName) {
   return modules.includes(moduleName);
 }
 
+function defaultStageAccessForRole(roleName) {
+  const defaults = {
+    vendedor: [
+      "solicitacao_criada",
+      "enviada_ao_vendedor",
+      "em_negociacao",
+      "proposta_aceita",
+      "perdida",
+      "cancelada"
+    ],
+    comercial_interno: [...WORKFLOW_STAGE_OPTIONS],
+    propostas: [
+      "em_triagem",
+      "aguardando_informacoes",
+      "em_preparacao_da_proposta",
+      "proposta_finalizada"
+    ],
+    juridico: [
+      "elaboracao_de_contrato",
+      "negociacao_de_clausulas",
+      "contrato_assinado"
+    ],
+    gestor: [...WORKFLOW_STAGE_OPTIONS],
+    diretoria: [...WORKFLOW_STAGE_OPTIONS],
+    administrador: [...WORKFLOW_STAGE_OPTIONS]
+  };
+
+  return defaults[roleName] || [...WORKFLOW_STAGE_OPTIONS];
+}
+
+function normalizeStageAccess(stageAccess, roleName) {
+  const base = Array.isArray(stageAccess)
+    ? stageAccess
+    : String(stageAccess || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  const normalized = [...new Set(base.filter((item) => WORKFLOW_STAGE_OPTIONS.includes(item)))];
+  return normalized.length ? normalized : defaultStageAccessForRole(roleName);
+}
+
+function hasStageAccess(session, stageCode) {
+  if (!stageCode) return true;
+  const allowedStages = normalizeStageAccess(session?.stageAccess, session?.role);
+  return allowedStages.includes(stageCode);
+}
+
+function assertStageAccess(session, stageCode, message) {
+  if (!hasStageAccess(session, stageCode)) {
+    const error = new Error(message || "Seu usuário não tem acesso a esta etapa.");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
 function assertModuleAccess(session, moduleName, message) {
   if (!hasModuleAccess(session, moduleName)) {
     const error = new Error(message || "Seu usuário não tem acesso a este módulo.");
@@ -342,6 +414,7 @@ function createSession(user) {
     roles: user.roles || [],
     primaryRole: user.primaryRole || user.roles?.[0] || "vendedor",
     moduleAccess: user.moduleAccess || ["vendas"],
+    stageAccess: user.stageAccess || [],
     mustChangePassword: Boolean(user.mustChangePassword),
     expiresAt
   });
@@ -401,6 +474,7 @@ function buildAuthUser(row) {
     roles: row.roles?.length ? row.roles : ["vendedor"],
     primaryRole,
     moduleAccess: normalizeModuleAccess(row.moduleAccess, primaryRole),
+    stageAccess: normalizeStageAccess(row.stageAccess, primaryRole),
     mustChangePassword: Boolean(row.mustChangePassword)
   };
 }
@@ -722,6 +796,13 @@ async function ensureModuleAccessColumn() {
   `);
 }
 
+async function ensureWorkflowStageAccessColumn() {
+  await query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS workflow_stage_access TEXT[] DEFAULT ARRAY[]::TEXT[]
+  `);
+}
+
 async function ensureProposalRegistryColumns() {
   await query(`
     ALTER TABLE proposal_registry
@@ -1014,7 +1095,7 @@ async function ensureBaseAccessData() {
   });
 }
 
-async function getLookups() {
+async function getLookups(session = null) {
   const [lossReasons, cancelReasons, sellers, workflowStages] = await Promise.all([
     query("SELECT id, name FROM loss_reasons WHERE is_active = TRUE ORDER BY name ASC"),
     query("SELECT id, name FROM cancel_reasons WHERE is_active = TRUE ORDER BY name ASC"),
@@ -1046,7 +1127,9 @@ async function getLookups() {
     lossReasons: lossReasons.rows,
     cancelReasons: cancelReasons.rows,
     sellers: sellers.rows,
-    workflowStages: workflowStages.rows
+    workflowStages: session
+      ? workflowStages.rows.filter((stage) => hasStageAccess(session, stage.code))
+      : workflowStages.rows
   };
 }
 
@@ -1496,9 +1579,10 @@ async function listRequests() {
 }
 
 function filterRowsBySession(rows, session) {
-  if (session.role !== "vendedor") return rows;
+  let filteredRows = rows.filter((row) => hasStageAccess(session, row.stageCode));
+  if (session.role !== "vendedor") return filteredRows;
   if (!session.email) return [];
-  return rows.filter((row) => String(row.sellerEmail || "").toLowerCase() === session.email);
+  return filteredRows.filter((row) => String(row.sellerEmail || "").toLowerCase() === session.email);
 }
 
 async function getReports(filters = {}) {
@@ -2293,6 +2377,7 @@ async function authenticateUser(email, password) {
        u.name,
        u.email,
        u.module_access AS "moduleAccess",
+       u.workflow_stage_access AS "stageAccess",
        u.must_change_password AS "mustChangePassword",
        u.password_hash AS "passwordHash",
        COALESCE(array_remove(array_agg(r.name ORDER BY r.name), NULL), ARRAY[]::varchar[]) AS roles
@@ -2301,7 +2386,7 @@ async function authenticateUser(email, password) {
      LEFT JOIN roles r ON r.id = ur.role_id
      WHERE u.is_active = TRUE
        AND LOWER(u.email) = LOWER($1)
-     GROUP BY u.id, u.name, u.email, u.password_hash, u.module_access, u.must_change_password`,
+     GROUP BY u.id, u.name, u.email, u.password_hash, u.module_access, u.workflow_stage_access, u.must_change_password`,
     [email]
   );
 
@@ -2323,6 +2408,7 @@ async function getCurrentUser(session) {
        u.name,
        u.email,
        u.module_access AS "moduleAccess",
+       u.workflow_stage_access AS "stageAccess",
        u.must_change_password AS "mustChangePassword",
        COALESCE(array_remove(array_agg(r.name ORDER BY r.name), NULL), ARRAY[]::varchar[]) AS roles
      FROM users u
@@ -2330,7 +2416,7 @@ async function getCurrentUser(session) {
      LEFT JOIN roles r ON r.id = ur.role_id
      WHERE u.id = $1
        AND u.is_active = TRUE
-     GROUP BY u.id, u.name, u.email, u.module_access, u.must_change_password`,
+     GROUP BY u.id, u.name, u.email, u.module_access, u.workflow_stage_access, u.must_change_password`,
     [session.userId]
   );
 
@@ -2432,19 +2518,21 @@ async function listManagedUsers() {
        u.department,
        u.is_active AS "isActive",
        u.module_access AS "moduleAccess",
+       u.workflow_stage_access AS "stageAccess",
        u.must_change_password AS "mustChangePassword",
        COALESCE(array_remove(array_agg(r.name ORDER BY r.name), NULL), ARRAY[]::varchar[]) AS roles
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
      LEFT JOIN roles r ON r.id = ur.role_id
-     GROUP BY u.id, u.name, u.email, u.department, u.is_active, u.module_access, u.must_change_password
+     GROUP BY u.id, u.name, u.email, u.department, u.is_active, u.module_access, u.workflow_stage_access, u.must_change_password
      ORDER BY u.name ASC, u.email ASC`
   );
 
   return result.rows.map((row) => ({
     ...row,
     primaryRole: row.roles?.[0] || "vendedor",
-    moduleAccess: normalizeModuleAccess(row.moduleAccess, row.roles?.[0] || "vendedor")
+    moduleAccess: normalizeModuleAccess(row.moduleAccess, row.roles?.[0] || "vendedor"),
+    stageAccess: normalizeStageAccess(row.stageAccess, row.roles?.[0] || "vendedor")
   }));
 }
 
@@ -2459,8 +2547,8 @@ async function createManagedUser(payload, session) {
     let userResult;
     try {
       userResult = await client.query(
-        `INSERT INTO users (name, email, department, is_active, password_hash, module_access, must_change_password)
-         VALUES ($1, $2, $3, $4, $5, $6::text[], TRUE)
+      `INSERT INTO users (name, email, department, is_active, password_hash, module_access, workflow_stage_access, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, $6::text[], $7::text[], TRUE)
          RETURNING id`,
         [
           payload.name,
@@ -2468,7 +2556,8 @@ async function createManagedUser(payload, session) {
           payload.department || null,
           payload.isActive !== false,
           hashPassword(temporaryPassword),
-          normalizeModuleAccess(payload.moduleAccess, payload.role)
+          normalizeModuleAccess(payload.moduleAccess, payload.role),
+          normalizeStageAccess(payload.stageAccess, payload.role)
         ]
         );
       } catch (error) {
@@ -2520,6 +2609,7 @@ async function createManagedUser(payload, session) {
         department: payload.department || null,
         isActive: payload.isActive !== false,
         moduleAccess: normalizeModuleAccess(payload.moduleAccess, payload.role),
+        stageAccess: normalizeStageAccess(payload.stageAccess, payload.role),
         mustChangePassword: true
       }
     });
@@ -2551,6 +2641,7 @@ async function updateManagedUser(userId, payload, session) {
              is_active = $5,
              password_hash = COALESCE($6, password_hash),
              module_access = $7::text[],
+             workflow_stage_access = $8::text[],
              must_change_password = CASE WHEN $6 IS NOT NULL THEN TRUE ELSE must_change_password END,
              updated_at = NOW()
          WHERE id = $1`,
@@ -2561,7 +2652,8 @@ async function updateManagedUser(userId, payload, session) {
           payload.department || null,
           payload.isActive !== false,
           payload.password ? hashPassword(payload.password) : null,
-          normalizeModuleAccess(payload.moduleAccess, payload.role)
+          normalizeModuleAccess(payload.moduleAccess, payload.role),
+          normalizeStageAccess(payload.stageAccess, payload.role)
         ]
       );
     } catch (error) {
@@ -2586,7 +2678,8 @@ async function updateManagedUser(userId, payload, session) {
         department: payload.department || null,
         isActive: payload.isActive !== false,
         passwordChanged: Boolean(payload.password),
-        moduleAccess: normalizeModuleAccess(payload.moduleAccess, payload.role)
+        moduleAccess: normalizeModuleAccess(payload.moduleAccess, payload.role),
+        stageAccess: normalizeStageAccess(payload.stageAccess, payload.role)
       }
     });
   });
@@ -2813,6 +2906,8 @@ async function getRequestDetailFromDb(requestId, session) {
     }
   }
 
+  assertStageAccess(session, detailResult.rows[0].stageCode, "Seu usuário não tem acesso a esta etapa.");
+
   const historyResult = await query(
     `SELECT
        ws.name AS title,
@@ -2892,9 +2987,9 @@ async function getRequestDetailFromDb(requestId, session) {
   };
 }
 
-async function getDashboardFromDb(filters = {}) {
+async function getDashboardFromDb(filters = {}, session = null) {
   const overviewResult = await query(buildRequestOverviewQuery());
-  const items = overviewResult.rows;
+  const items = session ? filterRowsBySession(overviewResult.rows, session) : overviewResult.rows;
 
   const openItems = items.filter((item) => item.slaStatus !== "Encerrado");
   const countByStatus = (status) => items.filter((item) => item.slaStatus === status).length;
@@ -3055,7 +3150,9 @@ async function getDashboardFromDb(filters = {}) {
     proposalSalesValues
   );
 
-  const salesRows = [...salesResult.rows, ...proposalOnlySalesResult.rows];
+  const salesRows = session
+    ? filterRowsBySession([...salesResult.rows, ...proposalOnlySalesResult.rows], session)
+    : [...salesResult.rows, ...proposalOnlySalesResult.rows];
   const salesPipelineRows = salesRows.filter((row) => !["perdida", "cancelada", "contrato_assinado"].includes(row.stageCode));
   const salesClosingRows = salesRows.filter((row) => (
     row.probabilityLevel === "Alta"
@@ -3407,6 +3504,8 @@ async function saveProposalRecord(payload, session) {
     const currentStageId = requestResult.rows[0].current_stage_id;
     const currentStageCode = requestResult.rows[0].current_stage_code;
     const nextOwnerId = proposalOwnerId || triageOwnerId || requestResult.rows[0].current_owner_user_id;
+    assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da proposta.");
+    assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
       em_triagem: ["em_triagem", "aguardando_informacoes", "em_preparacao_da_proposta"],
       aguardando_informacoes: ["aguardando_informacoes", "em_triagem", "em_preparacao_da_proposta"],
@@ -3592,6 +3691,15 @@ async function saveCommercialRecord(payload, session) {
     }
 
     if (hasValidProposalRegistryId && !requestExists) {
+      const proposalStageResult = await client.query(
+        `SELECT ${buildProposalStageCodeSql("pr")} AS current_stage_code
+         FROM proposal_registry pr
+         WHERE pr.id = $1`,
+        [proposalRegistryId]
+      );
+      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "em_negociacao";
+      assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
+      assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
       await client.query(
          `UPDATE proposal_registry
          SET manager_name = $2,
@@ -3662,11 +3770,17 @@ async function saveCommercialRecord(payload, session) {
     const cancelReasonId = await getReasonId(client, "cancel_reasons", payload.cancelReason);
 
     const requestResult = await client.query(
-      "SELECT current_stage_id, current_owner_user_id FROM requests WHERE id = $1",
+      `SELECT r.current_stage_id, r.current_owner_user_id, ws.code AS current_stage_code
+       FROM requests r
+       JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       WHERE r.id = $1`,
       [requestId]
     );
 
     const currentStageId = requestResult.rows[0].current_stage_id;
+    const currentStageCode = requestResult.rows[0].current_stage_code;
+    assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
+    assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
 
     const existing = await client.query(
       "SELECT id FROM commercial_records WHERE request_id = $1",
@@ -3822,6 +3936,15 @@ async function saveContractRecord(payload, session) {
     const contractOwnerId = await ensureUser(client, payload.contractOwnerName, payload.contractOwnerEmail);
 
     if (hasValidProposalRegistryId && !hasValidRequestId) {
+      const proposalStageResult = await client.query(
+        `SELECT ${buildProposalStageCodeSql("pr")} AS current_stage_code
+         FROM proposal_registry pr
+         WHERE pr.id = $1`,
+        [proposalRegistryId]
+      );
+      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "elaboracao_de_contrato";
+      assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
+      assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
       await client.query(
         `UPDATE proposal_registry
          SET manager_name = COALESCE($2, manager_name),
@@ -3870,7 +3993,10 @@ async function saveContractRecord(payload, session) {
     const nextStageId = await getStageId(client, payload.nextStageCode);
 
     const requestResult = await client.query(
-      "SELECT current_stage_id FROM requests WHERE id = $1",
+      `SELECT r.current_stage_id, ws.code AS current_stage_code
+       FROM requests r
+       JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       WHERE r.id = $1`,
       [requestId]
     );
 
@@ -3879,6 +4005,9 @@ async function saveContractRecord(payload, session) {
     }
 
     const currentStageId = requestResult.rows[0].current_stage_id;
+    const currentStageCode = requestResult.rows[0].current_stage_code;
+    assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
+    assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
 
     const values = [
       requestId,
@@ -4090,7 +4219,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/lookups") {
       assertAuthenticated(session);
-      const lookups = await getLookups();
+      const lookups = await getLookups(session);
       sendJson(response, 200, lookups);
       return;
     }
@@ -4273,7 +4402,7 @@ const server = http.createServer(async (request, response) => {
           seller: url.searchParams.get("seller"),
           branch: url.searchParams.get("branch"),
           probability: url.searchParams.get("probability")
-        });
+        }, session);
         if (session.role === "vendedor") {
           const filteredRows = filterRowsBySession(await listRequests(), session);
           const countByStatus = (status) => filteredRows.filter((item) => item.slaStatus === status).length;
@@ -4399,7 +4528,7 @@ const server = http.createServer(async (request, response) => {
         seller: url.searchParams.get("seller"),
         branch: url.searchParams.get("branch"),
         probability: url.searchParams.get("probability")
-      });
+      }, session);
       sendCsv(response, "funil-vendas-executivo.csv", buildSalesFunnelCsv(dashboardData.salesFunnel || {}));
       return;
     }
@@ -4537,6 +4666,7 @@ const server = http.createServer(async (request, response) => {
 ensurePasswordColumn()
   .then(() => ensureMustChangePasswordColumn())
   .then(() => ensureModuleAccessColumn())
+  .then(() => ensureWorkflowStageAccessColumn())
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureProposalRegistryColumns())
   .then(() => ensureUppercaseClientNames())

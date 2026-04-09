@@ -795,6 +795,44 @@
                       <label class="chip"><input type="checkbox" name="moduleAccess" value="admin" /> Administrador</label>
                     </div>
                   </div>
+                  <div class="control control-span-3 admin-stage-access-control">
+                    <label>Etapas liberadas</label>
+                    <div class="admin-stage-groups">
+                      <div class="admin-stage-group">
+                        <strong>Solicitações</strong>
+                        <div class="chips">
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="solicitacao_criada" /> Solicitação criada</label>
+                        </div>
+                      </div>
+                      <div class="admin-stage-group">
+                        <strong>Proposta</strong>
+                        <div class="chips">
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="em_triagem" /> Em triagem</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="aguardando_informacoes" /> Aguardando informações</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="em_preparacao_da_proposta" /> Em preparação da proposta</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="proposta_finalizada" /> Proposta finalizada</label>
+                        </div>
+                      </div>
+                      <div class="admin-stage-group">
+                        <strong>Negociações</strong>
+                        <div class="chips">
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="enviada_ao_vendedor" /> Enviada ao vendedor</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="em_negociacao" /> Em negociação</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="proposta_aceita" /> Proposta aceita</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="perdida" /> Perdida</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="cancelada" /> Cancelada</label>
+                        </div>
+                      </div>
+                      <div class="admin-stage-group">
+                        <strong>Contratos</strong>
+                        <div class="chips">
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="elaboracao_de_contrato" /> Elaboração de contrato</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="negociacao_de_clausulas" /> Negociação de cláusulas</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="contrato_assinado" /> Contrato assinado</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div class="control control-span-2">
                     <label for="admin-user-password">Senha</label>
                     <input id="admin-user-password" name="password" type="password" placeholder="Senha provisória na criação. Em edição, preencha só para redefinir e forçar troca no primeiro acesso." />

@@ -99,6 +99,10 @@ const MODULE_STAGE_CONFIG = {
   ]
 };
 
+const ALL_STAGE_CODES = Object.values(MODULE_STAGE_CONFIG)
+  .flat()
+  .map((stage) => stage.code);
+
 const ROLE_CONFIG = {
   vendedor: {
     label: "Vendedor",
@@ -222,6 +226,7 @@ let currentUser = {
   email: "",
   roles: [],
   moduleAccess: ["vendas"],
+  stageAccess: [],
   mustChangePassword: false
 };
 let forcePasswordChange = false;
@@ -807,10 +812,25 @@ function syncProposalTotalsFromServices() {
 }
 
 function renderStageBoard(moduleKey, rows) {
-  const stages = MODULE_STAGE_CONFIG[moduleKey] || [];
-  const activeStageCode = activeModuleStage[moduleKey];
+  const stages = allowedStagesForModule(moduleKey);
+  let activeStageCode = activeModuleStage[moduleKey];
   const tabsContainer = document.getElementById(`${moduleKey}-stage-tabs`);
   const tableContainer = document.getElementById(`${moduleKey}-stage-table`);
+
+  if (!stages.length) {
+    tabsContainer.innerHTML = "";
+    tableContainer.innerHTML = `
+      <tr>
+        <td colspan="8" class="muted">Nenhuma etapa liberada para este usuário.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  if (!stages.some((stage) => stage.code === activeStageCode)) {
+    activeModuleStage[moduleKey] = stages[0].code;
+    activeStageCode = stages[0].code;
+  }
 
   tabsContainer.innerHTML = stages.map((stage) => {
     const count = rows.filter((item) => item.stageCode === stage.code).length;
@@ -863,6 +883,27 @@ function defaultModulesForRole(roleName) {
   return defaults[roleName] || ["vendas"];
 }
 
+function defaultStageAccessForRole(roleName) {
+  const defaults = {
+    vendedor: ["solicitacao_criada", "enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
+    comercial_interno: [...ALL_STAGE_CODES],
+    propostas: ["em_triagem", "aguardando_informacoes", "em_preparacao_da_proposta", "proposta_finalizada"],
+    juridico: ["elaboracao_de_contrato", "negociacao_de_clausulas", "contrato_assinado"],
+    gestor: [...ALL_STAGE_CODES],
+    diretoria: [...ALL_STAGE_CODES],
+    administrador: [...ALL_STAGE_CODES]
+  };
+  return defaults[roleName] || [...ALL_STAGE_CODES];
+}
+
+function normalizeStageAccess(stageAccess, roleName = currentRole) {
+  const base = Array.isArray(stageAccess)
+    ? stageAccess
+    : String(stageAccess || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const normalized = [...new Set(base.filter((item) => ALL_STAGE_CODES.includes(item)))];
+  return normalized.length ? normalized : defaultStageAccessForRole(roleName);
+}
+
 function expandLegacyModules(modules = []) {
   const expanded = [];
   modules.forEach((moduleName) => {
@@ -881,10 +922,27 @@ function applyAdminModuleSelection(modules = []) {
   });
 }
 
+function applyAdminStageSelection(stageAccess = []) {
+  document.querySelectorAll('input[name="stageAccess"]').forEach((input) => {
+    input.checked = stageAccess.includes(input.value);
+  });
+}
+
+function allowedStagesForModule(moduleKey, stageAccess = currentUser.stageAccess || [], roleName = currentRole) {
+  const allowed = normalizeStageAccess(stageAccess, roleName);
+  return (MODULE_STAGE_CONFIG[moduleKey] || []).filter((stage) => allowed.includes(stage.code));
+}
+
 function isViewAllowedByModule(view, moduleAccess = currentUser.moduleAccess || []) {
   const requiredModule = VIEW_MODULE_MAP[view];
   if (!requiredModule) return true;
   return expandLegacyModules(moduleAccess).includes(requiredModule);
+}
+
+function isViewAllowedByStage(view, stageAccess = currentUser.stageAccess || [], roleName = currentRole) {
+  const stageViews = ["solicitacoes", "propostas", "negociacoes", "contratos"];
+  if (!stageViews.includes(view)) return true;
+  return allowedStagesForModule(view, stageAccess, roleName).length > 0;
 }
 
 function renderAdminUsers(users) {
@@ -985,6 +1043,7 @@ function resetAdminUserForm() {
   const defaultRole = availableRoles[0]?.name || "vendedor";
   document.getElementById("admin-user-role").value = defaultRole;
   applyAdminModuleSelection(defaultModulesForRole(defaultRole));
+  applyAdminStageSelection(defaultStageAccessForRole(defaultRole));
 }
 
 function updateRequestDeleteButton(requestId) {
@@ -1003,6 +1062,7 @@ function populateAdminUserForm(user) {
   document.getElementById("admin-user-active").value = String(Boolean(user.isActive));
   document.getElementById("admin-user-password").value = "";
   applyAdminModuleSelection(user.moduleAccess || []);
+  applyAdminStageSelection(user.stageAccess || []);
 }
 
 function renderAllStageBoards(rows) {
@@ -1049,7 +1109,7 @@ function organizeProposalModuleLayout() {
 
 function setActiveView(view) {
   const role = ROLE_CONFIG[currentRole] || ROLE_CONFIG.diretoria;
-  const allowedViews = role.views.filter((item) => isViewAllowedByModule(item));
+  const allowedViews = role.views.filter((item) => isViewAllowedByModule(item) && isViewAllowedByStage(item));
   if (forcePasswordChange && !allowedViews.includes("alterar_senha")) {
     allowedViews.push("alterar_senha");
   }
@@ -1084,7 +1144,9 @@ function applyRoleAccess(roleKey) {
   document.getElementById("session-user-email").textContent = currentUser.email || "-";
   document.getElementById("session-user-role").textContent = role.label;
   document.querySelectorAll("[data-view-link]").forEach((link) => {
-    const allowedByRole = role.views.includes(link.dataset.viewLink) && isViewAllowedByModule(link.dataset.viewLink);
+    const allowedByRole = role.views.includes(link.dataset.viewLink)
+      && isViewAllowedByModule(link.dataset.viewLink)
+      && isViewAllowedByStage(link.dataset.viewLink);
     const allowed = forcePasswordChange
       ? link.dataset.viewLink === "alterar_senha"
       : allowedByRole;
@@ -1926,6 +1988,7 @@ function applyAuthenticatedUser(user) {
     email: user.email,
     roles: user.roles || [],
     moduleAccess: user.moduleAccess || ["vendas"],
+    stageAccess: user.stageAccess || [],
     mustChangePassword: Boolean(user.mustChangePassword)
   };
   forcePasswordChange = Boolean(user.mustChangePassword);
@@ -2722,7 +2785,9 @@ async function bootstrap() {
 
   document.getElementById("admin-user-role").addEventListener("change", () => {
     if (!document.getElementById("admin-user-id").value) {
-      applyAdminModuleSelection(defaultModulesForRole(document.getElementById("admin-user-role").value));
+      const selectedRole = document.getElementById("admin-user-role").value;
+      applyAdminModuleSelection(defaultModulesForRole(selectedRole));
+      applyAdminStageSelection(defaultStageAccessForRole(selectedRole));
     }
   });
 
@@ -2820,6 +2885,7 @@ async function bootstrap() {
       role: document.getElementById("admin-user-role").value.trim(),
       isActive: document.getElementById("admin-user-active").value === "true",
       moduleAccess: [...document.querySelectorAll('input[name="moduleAccess"]:checked')].map((input) => input.value),
+      stageAccess: [...document.querySelectorAll('input[name="stageAccess"]:checked')].map((input) => input.value),
       password: passwordValue || undefined
     };
 

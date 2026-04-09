@@ -250,6 +250,21 @@ body {
   display: none;
 }
 
+.admin-stage-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-stage-group {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-stage-group strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
 .main {
   padding: 18px;
   display: grid;
