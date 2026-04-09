@@ -77,11 +77,11 @@ const VIEW_CONFIG = {
 
 const MODULE_STAGE_CONFIG = {
   solicitacoes: [
-    { code: "solicitacao_criada", label: "Solicitacao criada" },
-    { code: "em_triagem", label: "Em triagem" },
-    { code: "aguardando_informacoes", label: "Aguardando informacoes" }
+    { code: "solicitacao_criada", label: "Solicitacao criada" }
   ],
   propostas: [
+    { code: "em_triagem", label: "Em triagem" },
+    { code: "aguardando_informacoes", label: "Aguardando informacoes" },
     { code: "em_preparacao_da_proposta", label: "Em preparacao da proposta" },
     { code: "proposta_finalizada", label: "Proposta finalizada" }
   ],
@@ -1301,20 +1301,105 @@ function renderAttachmentList(containerId, items, allowedTypes = []) {
   `).join("");
 }
 
+function formatSummaryValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (value === true) return "Sim";
+  if (value === false) return "Nao";
+  return String(value);
+}
+
+function humanizeWorkflowText(value) {
+  return formatSummaryValue(value)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function renderSummaryCard(title, items) {
+  if (!items.length) {
+    return `
+      <div class="request-summary-card">
+        <h4>${title}</h4>
+        <div class="muted">Nenhum item informado.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="request-summary-card">
+      <h4>${title}</h4>
+      <ul class="request-summary-list">
+        ${items.map((item) => `<li>${item}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderProposalRequestSummary(detail) {
+  const container = document.getElementById("proposal-request-summary");
+  if (!container) return;
+
+  const normalizedServices = (detail.services || []).map((item) => humanizeWorkflowText(item.serviceType));
+  const benefits = (detail.benefits || []).map((item) => {
+    const parts = [humanizeWorkflowText(item.benefitType)];
+    if (item.optionLabel) parts.push(item.optionLabel);
+    if (item.regionValue !== null && item.regionValue !== undefined) parts.push(`Regiao/dia: ${item.regionValue}`);
+    if (item.notes) parts.push(item.notes);
+    return parts.join(" | ");
+  });
+  const posts = (detail.posts || []).map((item) => [
+    `Tipo: ${humanizeWorkflowText(item.postType)}`,
+    `Postos: ${formatSummaryValue(item.qtyPosts)}`,
+    `Funcionarios: ${formatSummaryValue(item.qtyWorkers)}`,
+    `Funcao: ${formatSummaryValue(item.functionName)}`,
+    `Escala: ${formatSummaryValue(item.workScale)}`,
+    `Horario: ${formatSummaryValue(item.startTime)} as ${formatSummaryValue(item.endTime)}`,
+    `Sabado: ${formatSummaryValue(item.saturdayTime)}`,
+    `Feriado: ${formatSummaryValue(item.holidayFlag)}`,
+    `Indenizado: ${formatSummaryValue(item.indemnifiedFlag)}`,
+    `Uniforme: ${formatSummaryValue(item.uniformText)}`,
+    `Ajuda de custo: ${formatSummaryValue(item.costAllowanceValue)}`
+  ].join(" | "));
+  const equipments = (detail.equipments || []).map((item) => [
+    `Categoria: ${humanizeWorkflowText(item.category)}`,
+    `Equipamento: ${formatSummaryValue(item.equipmentName)}`,
+    `Quantidade: ${formatSummaryValue(item.quantity)}`,
+    `Observacao: ${formatSummaryValue(item.notes)}`
+  ].join(" | "));
+
+  container.innerHTML = [
+    renderSummaryCard("Tipos de servico", normalizedServices),
+    renderSummaryCard("Beneficios", benefits),
+    renderSummaryCard("Postos / funcao / escala / horario", posts),
+    renderSummaryCard("Equipamentos", equipments)
+  ].join("");
+}
+
+function workflowViewFromStage(stageCode, fallbackView = "solicitacoes") {
+  if ((MODULE_STAGE_CONFIG.propostas || []).some((stage) => stage.code === stageCode)) return "propostas";
+  if ((MODULE_STAGE_CONFIG.negociacoes || []).some((stage) => stage.code === stageCode)) return "negociacoes";
+  if ((MODULE_STAGE_CONFIG.contratos || []).some((stage) => stage.code === stageCode)) return "contratos";
+  if ((MODULE_STAGE_CONFIG.solicitacoes || []).some((stage) => stage.code === stageCode)) return "solicitacoes";
+  return fallbackView;
+}
+
 function populateProposalForm(detail) {
   document.getElementById("selected-request-id").value = detail.id || "";
   document.getElementById("selected-request-number").value = detail.requestNumber || "";
   document.getElementById("selected-request-company").value = detail.company || "";
   document.getElementById("selected-request-stage").value = detail.stage || "";
   document.getElementById("next-stage-code").value = "";
-
-  if (!document.getElementById("triage-owner-name").value) {
-    document.getElementById("triage-owner-name").value = currentUser.name;
-  }
-
-  if (!document.getElementById("triage-owner-email").value) {
-    document.getElementById("triage-owner-email").value = currentUser.email;
-  }
+  document.getElementById("triage-owner-name").value = detail.triageOwnerName || currentUser.name || "";
+  document.getElementById("triage-owner-email").value = detail.triageOwnerEmail || currentUser.email || "";
+  document.getElementById("triage-status").value = detail.proposalTriageStatus || "";
+  document.getElementById("triage-note").value = detail.proposalTriageNote || "";
+  document.getElementById("proposal-owner-name").value = detail.proposalOwnerName || "";
+  document.getElementById("proposal-owner-email").value = detail.proposalOwnerEmail || "";
+  document.getElementById("expected-completion-date").value = detail.proposalExpectedCompletionDate || "";
+  document.getElementById("proposal-version").value = detail.proposalVersion || "";
+  document.getElementById("internal-notes").value = detail.proposalInternalNotes || "";
+  document.getElementById("commercial-assumptions").value = detail.proposalCommercialAssumptions || "";
+  document.getElementById("operational-assumptions").value = detail.proposalOperationalAssumptions || "";
+  renderProposalRequestSummary(detail);
 }
 
 function populateCommercialForm(detail) {
@@ -2056,13 +2141,17 @@ async function loadRequestAttachments(requestId) {
 
 function showLoginScreen() {
   forcePasswordChange = false;
+  document.getElementById("login-screen").hidden = false;
   document.getElementById("login-screen").style.display = "grid";
+  document.getElementById("app-shell").hidden = true;
   document.getElementById("app-shell").classList.add("app-hidden");
   document.getElementById("login-feedback").textContent = "";
 }
 
 function showAppShell() {
+  document.getElementById("login-screen").hidden = true;
   document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app-shell").hidden = false;
   document.getElementById("app-shell").classList.remove("app-hidden");
 }
 
@@ -2200,16 +2289,16 @@ async function bootstrap() {
     }
   }
 
-  document.getElementById("requests-table").addEventListener("click", async (event) => {
-    const row = event.target.closest(".request-row");
-    if (!row) return;
+    document.getElementById("requests-table").addEventListener("click", async (event) => {
+      const row = event.target.closest(".request-row");
+      if (!row) return;
 
-    try {
-      await selectRequest(row.dataset.requestId);
-      setActiveView("solicitacoes");
-    } catch (error) {
-      alert(`Nao foi possivel carregar a ficha da solicitacao: ${error.message}`);
-    }
+      try {
+        const detail = await selectRequest(row.dataset.requestId);
+        setActiveView(workflowViewFromStage(detail.stageCode, "solicitacoes"));
+      } catch (error) {
+        alert(`Nao foi possivel carregar a ficha da solicitacao: ${error.message}`);
+      }
   });
 
   document.querySelector(".sidebar").addEventListener("click", (event) => {
@@ -2266,16 +2355,17 @@ async function bootstrap() {
         alert(`Nao foi possivel carregar o negocio: ${error.message}`);
       }
       return;
-    }
+      }
 
-    try {
-      const moduleKey = stageRow.dataset.moduleKey || currentView;
-      await selectRequest(stageRow.dataset.requestId);
-      setActiveView(moduleKey);
-      scrollToWorkflowForm(moduleKey);
-    } catch (error) {
-      alert(`Nao foi possivel carregar a ficha da solicitacao: ${error.message}`);
-    }
+      try {
+        const moduleKey = stageRow.dataset.moduleKey || currentView;
+        const detail = await selectRequest(stageRow.dataset.requestId);
+        const targetView = workflowViewFromStage(detail.stageCode, moduleKey);
+        setActiveView(targetView);
+        scrollToWorkflowForm(targetView);
+      } catch (error) {
+        alert(`Nao foi possivel carregar a ficha da solicitacao: ${error.message}`);
+      }
   });
 
   document.getElementById("proposal-crm-request-table").addEventListener("click", async (event) => {

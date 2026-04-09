@@ -26,7 +26,7 @@
     </div>
   </section>
 
-  <div id="app-shell" class="app app-hidden">
+  <div id="app-shell" class="app app-hidden" hidden>
     <aside class="sidebar">
       <div class="brand">
         <img src="/unisetter-logo.png" alt="Grupo Uniseter" class="brand-logo" />
@@ -500,11 +500,11 @@
         </div>
       </section>
 
-      <section class="card page-view" data-view="solicitacoes">
-        <div class="section-head">
-          <h2>Solicitacoes por etapa</h2>
-          <span>Abertura e triagem inicial</span>
-        </div>
+        <section class="card page-view" data-view="solicitacoes">
+          <div class="section-head">
+            <h2>Solicitacoes por etapa</h2>
+            <span>Abertura inicial pelo vendedor</span>
+          </div>
         <div class="stage-tabs" id="solicitacoes-stage-tabs"></div>
         <div class="table-wrap compact-table-wrap stage-board-wrap">
           <table>
@@ -525,11 +525,11 @@
         </div>
       </section>
 
-      <section class="card page-view" data-view="propostas">
-        <div class="section-head">
-          <h2>Fila de propostas por etapa</h2>
-          <span>Preparacao e finalizacao interna</span>
-        </div>
+        <section class="card page-view" data-view="propostas">
+          <div class="section-head">
+            <h2>Fila de propostas por etapa</h2>
+            <span>Triagem, pendencias, preparacao e proposta finalizada</span>
+          </div>
         <div class="stage-tabs" id="propostas-stage-tabs"></div>
         <div class="table-wrap compact-table-wrap stage-board-wrap">
           <table>
@@ -1153,9 +1153,9 @@
             <div id="proposal-attachments" class="attachment-list empty-state">Nenhum anexo carregado.</div>
           </div>
 
-          <div class="form-block">
-            <h3>Solicitacao vinculada</h3>
-            <div class="form-grid">
+            <div class="form-block">
+              <h3>Solicitacao vinculada</h3>
+              <div class="form-grid">
               <div class="control control-span-2">
                 <label for="selected-request-number">Numero da solicitacao</label>
                 <input id="selected-request-number" name="selectedRequestNumber" readonly />
@@ -1167,12 +1167,22 @@
               <div class="control">
                 <label for="selected-request-stage">Etapa atual</label>
                 <input id="selected-request-stage" name="selectedRequestStage" readonly />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="form-block">
-            <h3>Triagem</h3>
+            <div class="form-block">
+              <div class="section-head">
+                <h3>Resumo da solicitacao</h3>
+                <span>Informacoes completas enviadas pelo vendedor</span>
+              </div>
+              <div id="proposal-request-summary" class="request-summary-grid">
+                <div class="empty-state">Selecione uma solicitacao para visualizar o resumo completo.</div>
+              </div>
+            </div>
+
+            <div class="form-block">
+              <h3>Triagem</h3>
             <div class="form-grid">
               <input id="selected-request-id" name="requestId" type="hidden" />
               <div class="control">

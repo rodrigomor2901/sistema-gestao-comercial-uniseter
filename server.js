@@ -1183,7 +1183,7 @@ async function createRequest(payload, session) {
 
   return withTransaction(async (client) => {
     const sellerUserId = await ensureUser(client, payload.sellerName, payload.sellerEmail);
-    const stageId = await getStageId(client, "solicitacao_criada");
+    const stageId = await getStageId(client, "em_triagem");
 
     const clientResult = await client.query(
       `INSERT INTO clients (
@@ -1337,9 +1337,9 @@ async function createRequest(payload, session) {
         sellerUserId,
         sellerUserId,
         "ok",
-        payload.initialNote || "Solicitacao criada pelo vendedor."
-      ]
-    );
+          payload.initialNote || "Solicitacao criada pelo vendedor e encaminhada para triagem."
+        ]
+      );
 
     await createAttachmentRecords(client, {
       requestId,
@@ -2715,7 +2715,8 @@ async function getRequestDetailFromDb(requestId, session) {
      SELECT
        r.id,
        r.request_number AS "requestNumber",
-        UPPER(c.legal_name) AS company,
+       UPPER(c.legal_name) AS company,
+       ws.code AS "stageCode",
        seller_user.email AS "sellerEmail",
        ws.name AS stage,
        ${slaStatusCase} AS "slaStatus",
@@ -2730,6 +2731,17 @@ async function getRequestDetailFromDb(requestId, session) {
        linked_proposal.negotiation_status AS "proposalStatus",
        linked_proposal.manager_name AS "proposalManager",
        linked_proposal.proposal_value AS "proposalValue",
+       triage_user.name AS "triageOwnerName",
+       triage_user.email AS "triageOwnerEmail",
+       proposal_user.name AS "proposalOwnerName",
+       proposal_user.email AS "proposalOwnerEmail",
+       proposal_records.triage_status AS "proposalTriageStatus",
+       proposal_records.triage_note AS "proposalTriageNote",
+       proposal_records.internal_notes AS "proposalInternalNotes",
+       proposal_records.commercial_assumptions AS "proposalCommercialAssumptions",
+       proposal_records.operational_assumptions AS "proposalOperationalAssumptions",
+       TO_CHAR(proposal_records.expected_completion_date, 'YYYY-MM-DD') AS "proposalExpectedCompletionDate",
+       proposal_records.proposal_version AS "proposalVersion",
        COALESCE(commercial_seller_user.name, seller_user.name) AS "commercialSellerName",
        COALESCE(commercial_seller_user.email, seller_user.email) AS "commercialSellerEmail",
        TO_CHAR(commercial_records.sent_to_seller_at, 'YYYY-MM-DD') AS "commercialSentToSellerAt",
@@ -2756,6 +2768,9 @@ async function getRequestDetailFromDb(requestId, session) {
      LEFT JOIN commercial_records ON commercial_records.request_id = r.id
      LEFT JOIN users commercial_seller_user ON commercial_seller_user.id = commercial_records.seller_user_id
      LEFT JOIN contract_records ON contract_records.request_id = r.id
+     LEFT JOIN proposal_records ON proposal_records.request_id = r.id
+     LEFT JOIN users triage_user ON triage_user.id = proposal_records.triage_owner_user_id
+     LEFT JOIN users proposal_user ON proposal_user.id = proposal_records.proposal_owner_user_id
      LEFT JOIN loss_reasons ON loss_reasons.id = r.lost_reason_id
      LEFT JOIN cancel_reasons ON cancel_reasons.id = r.cancel_reason_id
      LEFT JOIN LATERAL (
@@ -2794,8 +2809,64 @@ async function getRequestDetailFromDb(requestId, session) {
     [requestId]
   );
 
+  const servicesResult = await query(
+    `SELECT service_type AS "serviceType"
+     FROM request_services
+     WHERE request_id = $1
+     ORDER BY id`,
+    [requestId]
+  );
+
+  const benefitsResult = await query(
+    `SELECT
+       benefit_type AS "benefitType",
+       option_label AS "optionLabel",
+       region_value AS "regionValue",
+       notes
+     FROM request_benefits
+     WHERE request_id = $1
+     ORDER BY id`,
+    [requestId]
+  );
+
+  const postsResult = await query(
+    `SELECT
+       post_type AS "postType",
+       qty_posts AS "qtyPosts",
+       qty_workers AS "qtyWorkers",
+       function_name AS "functionName",
+       work_scale AS "workScale",
+       start_time AS "startTime",
+       end_time AS "endTime",
+       saturday_time AS "saturdayTime",
+       holiday_flag AS "holidayFlag",
+       indemnified_flag AS "indemnifiedFlag",
+       uniform_text AS "uniformText",
+       cost_allowance_value AS "costAllowanceValue"
+     FROM request_posts
+     WHERE request_id = $1
+     ORDER BY id`,
+    [requestId]
+  );
+
+  const equipmentsResult = await query(
+    `SELECT
+       category,
+       equipment_name AS "equipmentName",
+       quantity,
+       notes
+     FROM request_equipments
+     WHERE request_id = $1
+     ORDER BY id`,
+    [requestId]
+  );
+
   return {
     ...detailResult.rows[0],
+    services: servicesResult.rows,
+    benefits: benefitsResult.rows,
+    posts: postsResult.rows,
+    equipments: equipmentsResult.rows,
     history: historyResult.rows.map((row) => ({
       title: row.title,
       meta: row.meta,
@@ -3305,7 +3376,10 @@ async function saveProposalRecord(payload, session) {
     const nextStageId = await getStageId(client, payload.nextStageCode);
 
     const requestResult = await client.query(
-      "SELECT current_stage_id, current_owner_user_id FROM requests WHERE id = $1",
+      `SELECT r.current_stage_id, r.current_owner_user_id, ws.code AS current_stage_code
+       FROM requests r
+       JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       WHERE r.id = $1`,
       [requestId]
     );
 
@@ -3314,7 +3388,18 @@ async function saveProposalRecord(payload, session) {
     }
 
     const currentStageId = requestResult.rows[0].current_stage_id;
+    const currentStageCode = requestResult.rows[0].current_stage_code;
     const nextOwnerId = proposalOwnerId || triageOwnerId || requestResult.rows[0].current_owner_user_id;
+    const allowedTransitions = {
+      em_triagem: ["em_triagem", "aguardando_informacoes", "em_preparacao_da_proposta"],
+      aguardando_informacoes: ["aguardando_informacoes", "em_triagem", "em_preparacao_da_proposta"],
+      em_preparacao_da_proposta: ["em_preparacao_da_proposta", "aguardando_informacoes", "proposta_finalizada"],
+      proposta_finalizada: ["proposta_finalizada", "enviada_ao_vendedor"]
+    };
+
+    if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
+      throw new Error("Fluxo invalido para a etapa atual da proposta.");
+    }
 
     const existing = await client.query(
       "SELECT id FROM proposal_records WHERE request_id = $1",

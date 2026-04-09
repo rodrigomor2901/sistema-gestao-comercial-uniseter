@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, sans-serif;
@@ -651,6 +652,34 @@ th {
 .attachment-list {
   display: grid;
   gap: 8px;
+}
+
+.request-summary-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.request-summary-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fcfaf6;
+}
+
+.request-summary-card h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.request-summary-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.request-summary-list li + li {
+  margin-top: 4px;
 }
 
 .attachment-item {
