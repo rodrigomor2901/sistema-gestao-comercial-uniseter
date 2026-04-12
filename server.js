@@ -16,7 +16,7 @@ const UPLOADS_DIR = process.env.APP_UPLOADS_DIR
   : path.join(__dirname, "uploads");
 const sessions = new Map();
 const BRANCH_OPTIONS = ["Matriz - Campinas", "Filial Minas"];
-const RESPONSIBLE_OPTIONS = ["Andre", "Lana", "Rodrigo", "Guilherme", "Kleyton", "Maccari", "Supervisao", "Coordenacao"];
+const RESPONSIBLE_OPTIONS = ["ANDRE", "LANA", "RODRIGO", "GUILHERME", "KLEYTON", "MACCARI", "SUPERVISAO", "COORDENACAO"];
 const LEAD_SOURCE_OPTIONS = ["Prospeccao", "Indicacao Diretoria", "Indicacao Seter", "Cliente Ativo", "Campseg", "Marcondes"];
 const PROPOSAL_STATUS_OPTIONS = ["Gerado", "Em uso", "Vinculado ao CRM", "Em Negociacao", "Ganho", "Pedido", "Perdido", "Cancelado"];
 const DOCUMENT_TYPE_OPTIONS = ["PROPOSTA", "ORCAMENTO", "ADITIVO", "NOVA PROPOSTA", "REVISAO", "AUMENTO", "REDUCAO"];
@@ -39,9 +39,11 @@ const INDUSTRY_OPTIONS = [
   "INDUSTRIAS",
   "INSTITUICOES DE ENSINO",
   "LABORATORIOS DE ANALISE CLINICA",
-  "METALURGICAS E FUNDICOES"
+  "METALURGICAS E FUNDICOES",
+  "BOMBEIRO"
 ];
 const SERVICE_TYPE_OPTIONS = [
+  "Vigilancia",
   "Seguranca",
   "Portaria",
   "Limpeza",
@@ -54,6 +56,132 @@ const SERVICE_TYPE_OPTIONS = [
   "Motorista",
   "Logistica"
 ];
+const WORK_SCALE_OPTIONS = ["12 x 36", "6 x 1", "6 x 2", "5 x 1", "5 x 2", "4 x 2", "SDF", "Sab/Dom", "Dom", "Sab", "Feriado"];
+const EQUIPMENT_OPTIONS_BY_SERVICE = {
+  Vigilancia: [
+    "Acorda Vigia Alabella",
+    "Arma calibre 38 e municao",
+    "Arma Pistola 380 e municao",
+    "Lanterna recarregavel",
+    "Radio HT",
+    "Ronda Eletronica FindMe",
+    "Detector de metal tipo bastao",
+    "Colete e capa",
+    "Computador completo (simples)",
+    "Guarita simples",
+    "Guarita com banheiro quimico"
+  ],
+  Seguranca: [
+    "Acorda Vigia Alabella",
+    "Arma calibre 38 e municao",
+    "Arma Pistola 380 e municao",
+    "Lanterna recarregavel",
+    "Radio HT",
+    "Ronda Eletronica FindMe",
+    "Detector de metal tipo bastao",
+    "Colete e capa",
+    "Computador completo (simples)",
+    "Guarita simples",
+    "Guarita com banheiro quimico"
+  ],
+  Portaria: [
+    "Guarita simples",
+    "Guarita com banheiro quimico",
+    "Impressora Multifuncional (simples)",
+    "Kit botao de panico + modulo gprs",
+    "Lanterna recarregavel",
+    "Material de escritorio (verba)",
+    "Mesas e cadeiras",
+    "Nextel somente radio",
+    "Radio base (estacao fixa)",
+    "Radio HT"
+  ],
+  Limpeza: [
+    "Aspirador de liquidos LD 70",
+    "Aspirador de po/liquido 35L",
+    "Aspirador vertical CV 38/2",
+    "Balde Espremedor amarelo",
+    "Balde Espremedor azul",
+    "Carrinho Funcional America Completo",
+    "Carrinho Coletor 120 litros",
+    "Carrinho Coletor 240 litros",
+    "Conjunto MOP PO 60 CM",
+    "Conjunto MOP UMIDO",
+    "Enceradeira Industrial 350mm",
+    "Escada 5 degraus de Aluminio",
+    "Lavadora de Piso 510 mm - Eletrica",
+    "Lavadora de Pisos B70",
+    "Mini kit limpa vidros",
+    "Polidora High Speed - 510 mm UHS",
+    "Varredeira Manual",
+    "Varredeira Tripulada KM 100/100",
+    "Placa Sinalizadora"
+  ],
+  Jardinagem: [
+    "Aparador de Cerca Viva",
+    "Carrinho tipo Prefeitura 120 lts",
+    "Cortador de Grama - Elet.1800W-35 cm",
+    "Cortador de Grama - Gas.6 HP- 48 cm",
+    "Escada Light 10,2 metros",
+    "Extensao 40m com Carretel",
+    "Kit Jardinagem",
+    "Lamina para rocadeira",
+    "Motoserra - Gasolina 4.6 HP sabre 18",
+    "Pulverizador Costal 10litros",
+    "Rocadeira - Eletrica 0.5 HP",
+    "Rocadeira Lateral - Gas.",
+    "Soprador de folhas - Gas."
+  ],
+  Zeladoria: [
+    "Armario roupeiro",
+    "Computador",
+    "Mesa com cadeiras",
+    "Micro ondas",
+    "Organizador de Acessorios",
+    "Radio HT"
+  ],
+  Bombeiro: [
+    "Lanterna a prova de explosao",
+    "Lanterna recarregavel",
+    "Radio HT a prova de explosao",
+    "Detector de metal tipo bastao",
+    "Colete e capa"
+  ],
+  Monitoramento: [
+    "Camera fotografica digital",
+    "Computador completo (simples)",
+    "Impressora Multifuncional (simples)",
+    "Kit botao de panico + modulo gprs",
+    "Radio base (estacao fixa)",
+    "Radio HT"
+  ],
+  Manutencao: [
+    "Escada Pintor 6 degraus de Aluminio",
+    "Extensor 6,0 mts",
+    "Mangueira 50 mts",
+    "Organizador de Acessorios",
+    "Placa Sinalizadora"
+  ],
+  "Orientador de Transito": [
+    "Banqueta articulada",
+    "Colete e capa",
+    "Guarda chuva",
+    "Radio HT"
+  ],
+  Motorista: [
+    "Carro basico c/ar cond.4 portas",
+    "Giroflex",
+    "Moto 150cc",
+    "Rastreador"
+  ],
+  Logistica: [
+    "Carrinho Container 700 lts com tampa",
+    "Carrinho Cuba 400 lts com tampa",
+    "Carrinho Cuba com Estrutura Metalica",
+    "Computador",
+    "Organizador de Acessorios"
+  ]
+};
 const LOSS_REASON_OPTIONS = [
   "Preco acima do esperado",
   "Perda para concorrente",
@@ -265,6 +393,7 @@ function defaultStageAccessForRole(roleName) {
   const defaults = {
     vendedor: [
       "solicitacao_criada",
+      "aguardando_informacoes",
       "enviada_ao_vendedor",
       "em_negociacao",
       "proposta_aceita",
@@ -279,6 +408,7 @@ function defaultStageAccessForRole(roleName) {
       "proposta_finalizada"
     ],
     juridico: [
+      "proposta_aceita",
       "elaboracao_de_contrato",
       "negociacao_de_clausulas",
       "contrato_assinado"
@@ -289,6 +419,43 @@ function defaultStageAccessForRole(roleName) {
   };
 
   return defaults[roleName] || [...WORKFLOW_STAGE_OPTIONS];
+}
+
+function stageAccessMatches(items, expected) {
+  if (!Array.isArray(items) || !Array.isArray(expected) || items.length !== expected.length) {
+    return false;
+  }
+  return items.every((item, index) => item === expected[index]);
+}
+
+function shouldRefreshStageAccess(stageAccess, roleName) {
+  const normalized = normalizeStageAccess(stageAccess, roleName);
+  const desired = defaultStageAccessForRole(roleName);
+  if (!Array.isArray(stageAccess) || stageAccess.length === 0) {
+    return true;
+  }
+
+  if (stageAccessMatches(normalized, desired)) {
+    return false;
+  }
+
+  const legacyDefaults = {
+    vendedor: [
+      "solicitacao_criada",
+      "enviada_ao_vendedor",
+      "em_negociacao",
+      "proposta_aceita",
+      "perdida",
+      "cancelada"
+    ],
+    juridico: [
+      "elaboracao_de_contrato",
+      "negociacao_de_clausulas",
+      "contrato_assinado"
+    ]
+  };
+
+  return stageAccessMatches(normalized, legacyDefaults[roleName] || []);
 }
 
 function normalizeStageAccess(stageAccess, roleName) {
@@ -655,6 +822,36 @@ function buildProposalNumberAccessClause(session, values) {
   return "FALSE";
 }
 
+async function assertProposalRegistryAccessBySession(client, proposalRegistryId, session) {
+  if (hasPermission(session, "readAllProposalNumbers")) return;
+
+  if (session?.role !== "vendedor" || !session.userId) {
+    throw new Error("Acesso negado a esta proposta.");
+  }
+
+  const result = await client.query(
+    `SELECT
+       pr.seller_user_id AS "sellerUserId",
+       pr.manager_name AS "managerName"
+     FROM proposal_registry pr
+     WHERE pr.id = $1`,
+    [proposalRegistryId]
+  );
+
+  const proposal = result.rows[0];
+  if (!proposal) {
+    throw new Error("Proposta nao encontrada.");
+  }
+
+  const ownedBySeller = proposal.sellerUserId && Number(proposal.sellerUserId) === Number(session.userId);
+  const ownedByManagerName = !proposal.sellerUserId
+    && String(proposal.managerName || "").trim().toLowerCase() === String(session.name || "").trim().toLowerCase();
+
+  if (!ownedBySeller && !ownedByManagerName) {
+    throw new Error("Acesso negado a esta proposta.");
+  }
+}
+
 function formatProposalNumberDisplay(sequence, issueDate) {
   const year = issueDate ? new Date(issueDate).getFullYear() : new Date().getFullYear();
   return `${sequence}/${year}`;
@@ -662,7 +859,7 @@ function formatProposalNumberDisplay(sequence, issueDate) {
 
 function buildProposalStageCodeSql(alias = "pr") {
   return `CASE
-    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita') THEN 'proposta_aceita'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita', 'proposta ganha') THEN 'proposta_aceita'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'elaboracao_de_contrato'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'negociacao_de_clausulas'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'contrato assinado' THEN 'contrato_assinado'
@@ -674,7 +871,7 @@ function buildProposalStageCodeSql(alias = "pr") {
 
 function buildProposalStageLabelSql(alias = "pr") {
   return `CASE
-    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita') THEN 'Proposta aceita'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita', 'proposta ganha') THEN 'Proposta Ganha'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'Elaboração de contrato'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'Negociação de cláusulas'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'contrato assinado' THEN 'Contrato assinado'
@@ -687,7 +884,7 @@ function buildProposalStageLabelSql(alias = "pr") {
 function mapProposalStageCodeToStatus(nextStageCode, fallbackStatus = null) {
   const mapping = {
     em_negociacao: "Em negociacao",
-    proposta_aceita: "Proposta aceita",
+    proposta_aceita: "Proposta Ganha",
     elaboracao_de_contrato: "Elaboracao de contrato",
     negociacao_de_clausulas: "Negociacao de clausulas",
     contrato_assinado: "Contrato assinado",
@@ -868,6 +1065,33 @@ async function ensureWorkflowStageColumns() {
   `);
 }
 
+async function ensureWorkflowStageNames() {
+  const stageNames = {
+    solicitacao_criada: "Solicitacao criada",
+    em_triagem: "Em triagem",
+    aguardando_informacoes: "Aguardando informacoes",
+    em_preparacao_da_proposta: "Em Elaboracao da Proposta",
+    proposta_finalizada: "Proposta finalizada",
+    enviada_ao_vendedor: "Recebimento de Proposta",
+    em_negociacao: "Em negociacao",
+    proposta_aceita: "Proposta Ganha",
+    perdida: "Perdida",
+    cancelada: "Cancelada",
+    elaboracao_de_contrato: "Elaboracao de contrato",
+    negociacao_de_clausulas: "Negociacao de clausulas",
+    contrato_assinado: "Contrato assinado"
+  };
+
+  for (const [code, name] of Object.entries(stageNames)) {
+    await query(
+      `UPDATE workflow_stages
+       SET name = $2
+       WHERE code = $1`,
+      [code, name]
+    );
+  }
+}
+
 async function ensureUppercaseClientNames() {
   await query(`
     UPDATE clients
@@ -952,6 +1176,128 @@ async function ensureAuditLogTable() {
     CREATE INDEX IF NOT EXISTS idx_audit_logs_request_id
     ON audit_logs(request_id)
   `);
+}
+
+async function ensureNegotiationDiaryTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS negotiation_diary_entries (
+      id BIGSERIAL PRIMARY KEY,
+      request_id BIGINT REFERENCES requests(id) ON DELETE CASCADE,
+      proposal_registry_id BIGINT REFERENCES proposal_registry(id) ON DELETE CASCADE,
+      actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      actor_name VARCHAR(150),
+      actor_email VARCHAR(255),
+      contact_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      summary TEXT NOT NULL,
+      next_action TEXT,
+      probability_level VARCHAR(20),
+      commercial_notes TEXT,
+      requested_adjustments TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_negotiation_diary_request_id
+    ON negotiation_diary_entries(request_id, contact_date DESC, id DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_negotiation_diary_proposal_id
+    ON negotiation_diary_entries(proposal_registry_id, contact_date DESC, id DESC)
+  `);
+}
+
+function composeNegotiationDiaryNote(entry) {
+  const parts = [];
+  const summary = String(entry.summary || "").trim();
+  const nextAction = String(entry.nextAction || "").trim();
+  const probabilityLevel = String(entry.probabilityLevel || "").trim();
+  const commercialNotes = String(entry.commercialNotes || "").trim();
+  const requestedAdjustments = String(entry.requestedAdjustments || "").trim();
+
+  if (summary) parts.push(summary);
+  if (nextAction) parts.push(`Proxima acao: ${nextAction}`);
+  if (probabilityLevel) parts.push(`Probabilidade: ${probabilityLevel}`);
+  if (commercialNotes && commercialNotes !== summary) parts.push(`Observacoes: ${commercialNotes}`);
+  if (requestedAdjustments) parts.push(`Ajustes solicitados: ${requestedAdjustments}`);
+
+  return parts.join(" | ");
+}
+
+async function createNegotiationDiaryEntry(client, payload, session, context = {}) {
+  const summary = String(payload.negotiationSummary || "").trim();
+  if (!summary) return;
+
+  await client.query(
+    `INSERT INTO negotiation_diary_entries (
+      request_id,
+      proposal_registry_id,
+      actor_user_id,
+      actor_name,
+      actor_email,
+      contact_date,
+      summary,
+      next_action,
+      probability_level,
+      commercial_notes,
+      requested_adjustments
+    ) VALUES (
+      $1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()), $7, $8, $9, $10, $11
+    )`,
+    [
+      context.requestId || null,
+      context.proposalRegistryId || null,
+      session?.userId || context.actorUserId || null,
+      session?.name || payload.sellerName || null,
+      session?.email || payload.sellerEmail || null,
+      payload.lastContactAt || null,
+      summary,
+      payload.nextAction || null,
+      payload.probabilityLevel || null,
+      payload.commercialNotes || null,
+      payload.requestedAdjustments || null
+    ]
+  );
+}
+
+async function listNegotiationDiaryEntries(filters = {}) {
+  const clauses = [];
+  const values = [];
+
+  if (filters.requestId) {
+    const index = values.push(filters.requestId);
+    clauses.push(`request_id = $${index}`);
+  }
+
+  if (filters.proposalRegistryId) {
+    const index = values.push(filters.proposalRegistryId);
+    clauses.push(`proposal_registry_id = $${index}`);
+  }
+
+  if (!clauses.length) return [];
+
+  const result = await query(
+    `SELECT
+       id,
+       request_id AS "requestId",
+       proposal_registry_id AS "proposalRegistryId",
+       actor_name AS "actorName",
+       actor_email AS "actorEmail",
+       contact_date AS "contactDate",
+       TO_CHAR(contact_date, 'DD/MM/YYYY HH24:MI') AS "contactDateLabel",
+       summary,
+       next_action AS "nextAction",
+       probability_level AS "probabilityLevel",
+       commercial_notes AS "commercialNotes",
+       requested_adjustments AS "requestedAdjustments"
+     FROM negotiation_diary_entries
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY contact_date DESC, id DESC`,
+    values
+  );
+
+  return result.rows;
 }
 
 async function ensureLookupValues(client, tableName, names) {
@@ -1055,7 +1401,7 @@ async function ensureBaseAccessData() {
       let userId = insertResult.rows[0]?.id || null;
       if (!userId) {
         const existingUser = await client.query(
-          `SELECT id, module_access
+          `SELECT id, module_access, workflow_stage_access
              FROM users
             WHERE email = $1`,
           [user.email]
@@ -1064,6 +1410,7 @@ async function ensureBaseAccessData() {
 
         // Preserve customized access for existing users and only fill modules if blank.
         const moduleAccess = existingUser.rows[0]?.module_access;
+        const stageAccess = existingUser.rows[0]?.workflow_stage_access;
         if (
           userId &&
           (!Array.isArray(moduleAccess) || moduleAccess.length === 0)
@@ -1076,13 +1423,23 @@ async function ensureBaseAccessData() {
             [userId, defaultModulesForRole(user.role)]
           );
         }
+
+        if (userId && shouldRefreshStageAccess(stageAccess, user.role)) {
+          await client.query(
+            `UPDATE users
+                SET workflow_stage_access = $2::text[]
+              WHERE id = $1`,
+            [userId, defaultStageAccessForRole(user.role)]
+          );
+        }
       } else {
         await client.query(
           `UPDATE users
               SET module_access = $2::text[],
+                  workflow_stage_access = $3::text[],
                   must_change_password = FALSE
             WHERE id = $1`,
-          [userId, defaultModulesForRole(user.role)]
+          [userId, defaultModulesForRole(user.role), defaultStageAccessForRole(user.role)]
         );
       }
 
@@ -1133,6 +1490,8 @@ async function getLookups(session = null) {
     documentTypes: DOCUMENT_TYPE_OPTIONS,
     industries: INDUSTRY_OPTIONS,
     serviceTypes: SERVICE_TYPE_OPTIONS,
+    workScales: WORK_SCALE_OPTIONS,
+    equipmentOptionsByService: EQUIPMENT_OPTIONS_BY_SERVICE,
     lossReasons: lossReasons.rows,
     cancelReasons: cancelReasons.rows,
     sellers: sellers.rows,
@@ -1799,10 +2158,11 @@ async function listRequests() {
 }
 
 function filterRowsBySession(rows, session) {
-  let filteredRows = rows.filter((row) => hasStageAccess(session, row.stageCode));
-  if (session.role !== "vendedor") return filteredRows;
+  if (session.role !== "vendedor") {
+    return rows.filter((row) => hasStageAccess(session, row.stageCode));
+  }
   if (!session.email) return [];
-  return filteredRows.filter((row) => String(row.sellerEmail || "").toLowerCase() === session.email);
+  return rows.filter((row) => String(row.sellerEmail || "").toLowerCase() === session.email);
 }
 
 async function getReports(filters = {}) {
@@ -1972,7 +2332,7 @@ async function listProposalNumbers(filters = {}, session) {
   }));
 
   const requestValues = [];
-  const requestClauses = ["linked_proposal.id IS NULL"];
+  const requestClauses = ["linked_proposal.id IS NULL", "ws.code = 'em_preparacao_da_proposta'"];
 
   if (!hasPermission(session, "readAllRequests")) {
     const emailIndex = requestValues.push(session.email || "");
@@ -2077,7 +2437,7 @@ async function listProposalNumbers(filters = {}, session) {
 
 async function listCrmRequestsWithoutProposal(filters = {}, session) {
   const values = [];
-  const clauses = ["pr.id IS NULL"];
+  const clauses = ["pr.id IS NULL", "ws.code = 'em_preparacao_da_proposta'"];
 
   if (!hasPermission(session, "readAllRequests")) {
     const emailIndex = values.push(session.email || "");
@@ -2406,6 +2766,12 @@ async function getProposalNumberDetail(proposalId, session) {
   );
 
   detail.serviceLines = serviceLineResult.rows;
+  const negotiationDiaryEntries = await listNegotiationDiaryEntries({ proposalRegistryId: proposalId });
+  detail.history = negotiationDiaryEntries.map((entry) => ({
+    title: "Diario de negociacao",
+    meta: `${entry.contactDateLabel} - ${entry.actorName || entry.actorEmail || "Sistema"}`,
+    note: composeNegotiationDiaryNote(entry)
+  }));
   return detail;
 }
 
@@ -3008,7 +3374,7 @@ function buildSalesFunnelCsv(data) {
     Number(item.averageValue || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
   ]));
 
-  addSection("Conversão por vendedor", ["Vendedor", "Entradas", "Aceitas", "Fechadas", "Conversão final"], (data.conversionBySeller || []).map((item) => [
+  addSection("Conversão por vendedor", ["Vendedor", "Entradas", "Ganhas", "Fechadas", "Conversão final"], (data.conversionBySeller || []).map((item) => [
     item.label,
     item.entries,
     item.accepted,
@@ -3145,11 +3511,14 @@ async function getRequestDetailFromDb(requestId, session) {
     }
   }
 
-  assertStageAccess(session, detailResult.rows[0].stageCode, "Seu usuário não tem acesso a esta etapa.");
+  if (session?.role !== "vendedor") {
+    assertStageAccess(session, detailResult.rows[0].stageCode, "Seu usuário não tem acesso a esta etapa.");
+  }
 
   const historyResult = await query(
     `SELECT
        ws.name AS title,
+       rsh.entered_at AS "sortAt",
        TO_CHAR(rsh.entered_at, 'DD/MM/YYYY HH24:MI') || ' - ' || COALESCE(changed_user.name, 'Sistema') AS meta,
        COALESCE(rsh.note, 'Sem observacao registrada.') AS note
      FROM request_stage_history rsh
@@ -3159,6 +3528,8 @@ async function getRequestDetailFromDb(requestId, session) {
      ORDER BY rsh.entered_at DESC`,
     [requestId]
   );
+
+  const negotiationDiaryEntries = await listNegotiationDiaryEntries({ requestId });
 
   const servicesResult = await query(
     `SELECT service_type AS "serviceType"
@@ -3260,11 +3631,23 @@ async function getRequestDetailFromDb(requestId, session) {
     benefits: benefitsResult.rows,
     posts: postsResult.rows,
     equipments: equipmentsResult.rows,
-    history: historyResult.rows.map((row) => ({
+    history: [...historyResult.rows.map((row) => ({
       title: row.title,
       meta: row.meta,
-      note: row.note
-    }))
+      note: row.note,
+      sortAt: row.sortAt
+    })), ...negotiationDiaryEntries.map((entry) => ({
+      title: "Diario de negociacao",
+      meta: `${entry.contactDateLabel} - ${entry.actorName || entry.actorEmail || "Sistema"}`,
+      note: composeNegotiationDiaryNote(entry),
+      sortAt: entry.contactDate
+    }))]
+      .sort((left, right) => new Date(right.sortAt).getTime() - new Date(left.sortAt).getTime())
+      .map((row) => ({
+        title: row.title,
+        meta: row.meta,
+        note: row.note
+      }))
   };
 }
 
@@ -3372,6 +3755,7 @@ async function getDashboardFromDb(filters = {}, session = null) {
        r.request_number AS "requestNumber",
        c.legal_name AS company,
        seller_user.name AS seller,
+       seller_user.email AS "sellerEmail",
        ws.code AS "stageCode",
        ws.name AS "stageName",
        commercial_records.probability_level AS "probabilityLevel",
@@ -3409,6 +3793,7 @@ async function getDashboardFromDb(filters = {}, session = null) {
        COALESCE(pr.crm_request_number, '-') AS "requestNumber",
         UPPER(COALESCE(pr.client_name, '-')) AS company,
        COALESCE(pr.manager_name, seller_user.name, '-') AS seller,
+       seller_user.email AS "sellerEmail",
        ${buildProposalStageCodeSql("pr")} AS "stageCode",
        ${buildProposalStageLabelSql("pr")} AS "stageName",
        pr.probability_level AS "probabilityLevel",
@@ -3547,10 +3932,10 @@ async function getDashboardFromDb(filters = {}, session = null) {
 
   const stageLabels = [
     [(row) => row.stageCode === "solicitacao_criada", "Entrada"],
-    [(row) => row.stageCode === "em_preparacao_da_proposta", "Em preparo"],
-    [(row) => row.stageCode === "enviada_ao_vendedor", "Enviadas"],
+    [(row) => row.stageCode === "em_preparacao_da_proposta", "Em elaboracao"],
+    [(row) => row.stageCode === "enviada_ao_vendedor", "Recebimento"],
     [(row) => row.stageCode === "em_negociacao", "Em negociacao"],
-    [(row) => row.stageCode === "proposta_aceita", "Aceitas"],
+    [(row) => row.stageCode === "proposta_aceita", "Ganhas"],
     [(row) => row.stageCode === "contrato_assinado", "Fechadas"]
   ];
   const byStage = summarizeBy(salesRows, stageLabels);
@@ -3738,6 +4123,29 @@ async function assertRequestAccess(requestId, session) {
   }
 }
 
+async function assertRequestAccessByClient(client, requestId, session) {
+  if (hasPermission(session, "readAllRequests")) return;
+  if (!session.email) {
+    throw new Error("Usuario vendedor sem identificacao.");
+  }
+
+  const result = await client.query(
+    `SELECT seller_user.email AS "sellerEmail"
+     FROM requests r
+     JOIN users seller_user ON seller_user.id = r.seller_user_id
+     WHERE r.id = $1`,
+    [requestId]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Solicitacao nao encontrada.");
+  }
+
+  if (String(result.rows[0].sellerEmail || "").toLowerCase() !== session.email) {
+    throw new Error("Acesso negado a esta solicitacao.");
+  }
+}
+
 async function getAttachmentById(attachmentId) {
   const result = await query(
     `SELECT id, request_id AS "requestId", file_name AS "fileName", storage_path AS "storagePath",
@@ -3771,9 +4179,21 @@ async function saveProposalRecord(payload, session) {
     const nextStageId = await getStageId(client, payload.nextStageCode);
 
     const requestResult = await client.query(
-      `SELECT r.current_stage_id, r.current_owner_user_id, ws.code AS current_stage_code
+      `SELECT
+         r.current_stage_id,
+         r.current_owner_user_id,
+         ws.code AS current_stage_code,
+         linked_proposal.id AS "proposalRegistryId",
+         linked_proposal.proposal_number_display AS "proposalNumber"
        FROM requests r
        JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       LEFT JOIN LATERAL (
+         SELECT id, proposal_number_display
+         FROM proposal_registry
+         WHERE request_id = r.id
+         ORDER BY id DESC
+         LIMIT 1
+       ) linked_proposal ON TRUE
        WHERE r.id = $1`,
       [requestId]
     );
@@ -3796,6 +4216,10 @@ async function saveProposalRecord(payload, session) {
 
     if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
       throw new Error("Fluxo invalido para a etapa atual da proposta.");
+    }
+
+    if (payload.nextStageCode === "proposta_finalizada" && !requestResult.rows[0].proposalRegistryId) {
+      throw new Error("Gere e vincule o numero da proposta antes de finalizar a proposta.");
     }
 
     const existing = await client.query(
@@ -3972,6 +4396,7 @@ async function saveCommercialRecord(payload, session) {
     }
 
     if (hasValidProposalRegistryId && !requestExists) {
+      await assertProposalRegistryAccessBySession(client, proposalRegistryId, session);
       const proposalStageResult = await client.query(
         `SELECT ${buildProposalStageCodeSql("pr")} AS current_stage_code
          FROM proposal_registry pr
@@ -3981,6 +4406,14 @@ async function saveCommercialRecord(payload, session) {
       const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "em_negociacao";
       assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
       assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
+      const allowedTransitions = {
+        enviada_ao_vendedor: ["enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
+        em_negociacao: ["em_negociacao", "proposta_aceita", "perdida", "cancelada"],
+        proposta_aceita: ["proposta_aceita"]
+      };
+      if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
+        throw new Error("Fluxo invalido para a etapa atual da negociacao.");
+      }
       await client.query(
          `UPDATE proposal_registry
          SET manager_name = $2,
@@ -4022,6 +4455,11 @@ async function saveCommercialRecord(payload, session) {
         ]
       );
 
+      await createNegotiationDiaryEntry(client, payload, session, {
+        proposalRegistryId,
+        actorUserId: sellerUserId
+      });
+
       await logAuditEntry(client, {
         actor: {
           userId: session?.userId || sellerUserId,
@@ -4046,14 +4484,27 @@ async function saveCommercialRecord(payload, session) {
       throw new Error("Solicitacao nao encontrada para negociacao.");
     }
 
+    await assertRequestAccessByClient(client, requestId, session);
+
     const nextStageId = await getStageId(client, payload.nextStageCode);
     const lostReasonId = await getReasonId(client, "loss_reasons", payload.lossReason);
     const cancelReasonId = await getReasonId(client, "cancel_reasons", payload.cancelReason);
 
     const requestResult = await client.query(
-      `SELECT r.current_stage_id, r.current_owner_user_id, ws.code AS current_stage_code
+      `SELECT
+         r.current_stage_id,
+         r.current_owner_user_id,
+         ws.code AS current_stage_code,
+         linked_proposal.id AS "proposalRegistryId"
        FROM requests r
        JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       LEFT JOIN LATERAL (
+         SELECT id
+         FROM proposal_registry
+         WHERE request_id = r.id
+         ORDER BY id DESC
+         LIMIT 1
+       ) linked_proposal ON TRUE
        WHERE r.id = $1`,
       [requestId]
     );
@@ -4062,6 +4513,14 @@ async function saveCommercialRecord(payload, session) {
     const currentStageCode = requestResult.rows[0].current_stage_code;
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
+    const allowedTransitions = {
+      enviada_ao_vendedor: ["enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
+      em_negociacao: ["em_negociacao", "proposta_aceita", "perdida", "cancelada"],
+      proposta_aceita: ["proposta_aceita"]
+    };
+    if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
+      throw new Error("Fluxo invalido para a etapa atual da negociacao.");
+    }
 
     const existing = await client.query(
       "SELECT id FROM commercial_records WHERE request_id = $1",
@@ -4174,6 +4633,12 @@ async function saveCommercialRecord(payload, session) {
       ]
     );
 
+    await createNegotiationDiaryEntry(client, payload, session, {
+      requestId,
+      proposalRegistryId: requestResult.rows[0].proposalRegistryId || null,
+      actorUserId: sellerUserId
+    });
+
     await logAuditEntry(client, {
       actor: {
         userId: session?.userId || sellerUserId,
@@ -4217,6 +4682,7 @@ async function saveContractRecord(payload, session) {
     const contractOwnerId = await ensureUser(client, payload.contractOwnerName, payload.contractOwnerEmail);
 
     if (hasValidProposalRegistryId && !hasValidRequestId) {
+      await assertProposalRegistryAccessBySession(client, proposalRegistryId, session);
       const proposalStageResult = await client.query(
         `SELECT ${buildProposalStageCodeSql("pr")} AS current_stage_code
          FROM proposal_registry pr
@@ -4226,6 +4692,15 @@ async function saveContractRecord(payload, session) {
       const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "elaboracao_de_contrato";
       assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
       assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
+      const allowedTransitions = {
+        proposta_aceita: ["elaboracao_de_contrato"],
+        elaboracao_de_contrato: ["elaboracao_de_contrato", "negociacao_de_clausulas"],
+        negociacao_de_clausulas: ["elaboracao_de_contrato", "negociacao_de_clausulas", "contrato_assinado"],
+        contrato_assinado: ["contrato_assinado"]
+      };
+      if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
+        throw new Error("Fluxo invalido para a etapa atual do contratual.");
+      }
       await client.query(
         `UPDATE proposal_registry
          SET manager_name = COALESCE($2, manager_name),
@@ -4289,6 +4764,15 @@ async function saveContractRecord(payload, session) {
     const currentStageCode = requestResult.rows[0].current_stage_code;
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
+    const allowedTransitions = {
+      proposta_aceita: ["elaboracao_de_contrato"],
+      elaboracao_de_contrato: ["elaboracao_de_contrato", "negociacao_de_clausulas"],
+      negociacao_de_clausulas: ["elaboracao_de_contrato", "negociacao_de_clausulas", "contrato_assinado"],
+      contrato_assinado: ["contrato_assinado"]
+    };
+    if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
+      throw new Error("Fluxo invalido para a etapa atual do contratual.");
+    }
 
     const values = [
       requestId,
@@ -4971,6 +5455,7 @@ ensurePasswordColumn()
   .then(() => ensureModuleAccessColumn())
   .then(() => ensureWorkflowStageAccessColumn())
   .then(() => ensureWorkflowStageColumns())
+  .then(() => ensureWorkflowStageNames())
   .then(() => ensureProposalRegistryColumns())
   .then(() => ensureUppercaseClientNames())
   .then(() => ensureCanonicalSellerNames())
@@ -4979,6 +5464,7 @@ ensurePasswordColumn()
   .then(() => ensureCommercialRecordColumns())
   .then(() => ensureRequestPendingResponseColumns())
   .then(() => ensureAuditLogTable())
+  .then(() => ensureNegotiationDiaryTable())
   .then(() => ensureBaseAccessData())
   .then(() => {
     server.listen(PORT, HOST, () => {

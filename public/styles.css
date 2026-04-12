@@ -625,6 +625,14 @@ th {
   font-size: 12px;
 }
 
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .preview-box {
   margin-top: 12px;
   border: 1px dashed var(--line);
@@ -845,6 +853,50 @@ input[type="file"] {
 .equipamentos-table .table-action {
   min-width: 0;
   width: 72px;
+}
+
+.service-operation-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.service-operation-group {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: #fcfaf6;
+}
+
+.service-operation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.service-operation-head h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.service-operation-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.service-operation-empty {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 12px;
+}
+
+.inline-actions {
+  justify-content: flex-end;
+  margin: 8px 0 12px;
 }
 
 .compact-block {

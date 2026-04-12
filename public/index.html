@@ -666,11 +666,11 @@
                   <option value="solicitacao_criada">Solicitacao criada</option>
                   <option value="em_triagem">Em triagem</option>
                   <option value="aguardando_informacoes">Aguardando informações</option>
-                  <option value="em_preparacao_da_proposta">Em preparação da proposta</option>
+                  <option value="em_preparacao_da_proposta">Em Elaboração da Proposta</option>
                   <option value="proposta_finalizada">Proposta finalizada</option>
-                  <option value="enviada_ao_vendedor">Enviada ao vendedor</option>
+                  <option value="enviada_ao_vendedor">Recebimento de Proposta</option>
                   <option value="em_negociacao">Em negociacao</option>
-                  <option value="proposta_aceita">Proposta aceita</option>
+                  <option value="proposta_aceita">Proposta Ganha</option>
                   <option value="elaboracao_de_contrato">Elaboracao de contrato</option>
                   <option value="negociacao_de_clausulas">Negociacao de clausulas</option>
                   <option value="contrato_assinado">Contrato assinado</option>
@@ -809,16 +809,16 @@
                         <div class="chips">
                           <label class="chip"><input type="checkbox" name="stageAccess" value="em_triagem" /> Em triagem</label>
                           <label class="chip"><input type="checkbox" name="stageAccess" value="aguardando_informacoes" /> Aguardando informações</label>
-                          <label class="chip"><input type="checkbox" name="stageAccess" value="em_preparacao_da_proposta" /> Em preparação da proposta</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="em_preparacao_da_proposta" /> Em Elaboração da Proposta</label>
                           <label class="chip"><input type="checkbox" name="stageAccess" value="proposta_finalizada" /> Proposta finalizada</label>
                         </div>
                       </div>
                       <div class="admin-stage-group">
                         <strong>Negociações</strong>
                         <div class="chips">
-                          <label class="chip"><input type="checkbox" name="stageAccess" value="enviada_ao_vendedor" /> Enviada ao vendedor</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="enviada_ao_vendedor" /> Recebimento de Proposta</label>
                           <label class="chip"><input type="checkbox" name="stageAccess" value="em_negociacao" /> Em negociação</label>
-                          <label class="chip"><input type="checkbox" name="stageAccess" value="proposta_aceita" /> Proposta aceita</label>
+                          <label class="chip"><input type="checkbox" name="stageAccess" value="proposta_aceita" /> Proposta Ganha</label>
                           <label class="chip"><input type="checkbox" name="stageAccess" value="perdida" /> Perdida</label>
                           <label class="chip"><input type="checkbox" name="stageAccess" value="cancelada" /> Cancelada</label>
                         </div>
@@ -946,7 +946,7 @@
               </div>
               <div class="control">
                 <label for="seller-name">Vendedor responsável</label>
-                <input id="seller-name" name="sellerName" />
+                <input id="seller-name" name="sellerName" list="responsible-options" />
               </div>
               <div class="control">
                 <label for="seller-email">Email do vendedor</label>
@@ -1030,7 +1030,8 @@
               </div>
               <div class="control">
                 <label for="zip-code">CEP</label>
-                <input id="zip-code" name="zipCode" />
+                <input id="zip-code" name="zipCode" placeholder="00000-000" />
+                <small class="field-hint">Ao informar um CEP valido, o sistema tenta preencher endereco, bairro, cidade e estado.</small>
               </div>
             </div>
           </div>
@@ -1077,14 +1078,7 @@
             <h3>Dados da operacao / requisicao</h3>
             <div class="control">
               <label>Tipos de servico</label>
-              <div class="chips">
-                <label class="chip"><input type="checkbox" name="serviceType" value="Seguranca" />Seguranca</label>
-                <label class="chip"><input type="checkbox" name="serviceType" value="Portaria" />Portaria</label>
-                <label class="chip"><input type="checkbox" name="serviceType" value="Limpeza" />Limpeza</label>
-                <label class="chip"><input type="checkbox" name="serviceType" value="Jardinagem" />Jardinagem</label>
-                <label class="chip"><input type="checkbox" name="serviceType" value="Monitoramento" />Monitoramento</label>
-                <label class="chip"><input type="checkbox" name="serviceType" value="Manutencao" />Manutencao</label>
-              </div>
+              <div id="service-type-chips" class="chips"></div>
             </div>
           </div>
 
@@ -1125,52 +1119,10 @@
 
           <div class="form-block">
             <div class="section-head">
-              <h3>Postos</h3>
-              <button type="button" class="secondary" id="add-post-row">Adicionar linha</button>
+              <h3>Postos e equipamentos por serviço</h3>
+              <span>Os subitens são organizados por serviço para facilitar a leitura de quem vai elaborar o orçamento.</span>
             </div>
-            <div class="table-wrap">
-              <table class="dense-table postos-table">
-                <thead>
-                  <tr>
-                    <th>Tipo</th>
-                    <th>Qtd Postos</th>
-                    <th>Qtd Func.</th>
-                    <th>Funcao</th>
-                    <th>Escala</th>
-                    <th>Entrada</th>
-                    <th>Saida</th>
-                    <th>Sabado</th>
-                    <th>Feriado</th>
-                    <th>Indenizado</th>
-                    <th>Uniforme</th>
-                    <th>Ajuda de custos</th>
-                    <th>Acao</th>
-                  </tr>
-                </thead>
-                <tbody id="post-rows"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="form-block">
-            <div class="section-head">
-              <h3>Equipamentos</h3>
-              <button type="button" class="secondary" id="add-equipment-row">Adicionar linha</button>
-            </div>
-            <div class="table-wrap">
-              <table class="dense-table equipamentos-table">
-                <thead>
-                  <tr>
-                    <th>Categoria</th>
-                    <th>Equipamento</th>
-                    <th>Quantidade</th>
-                    <th>Observacao</th>
-                    <th>Acao</th>
-                  </tr>
-                </thead>
-                <tbody id="equipment-rows"></tbody>
-              </table>
-            </div>
+            <div id="service-operation-groups" class="service-operation-groups"></div>
           </div>
 
           <div class="form-block">
@@ -1203,6 +1155,7 @@
         </form>
 
         <div id="request-form-preview" class="preview-box"></div>
+        <datalist id="responsible-options"></datalist>
       </section>
 
       <section id="proposal-form-section" class="card page-view" data-view="propostas">
@@ -1235,6 +1188,10 @@
                 <label for="selected-request-stage">Etapa atual</label>
                 <input id="selected-request-stage" name="selectedRequestStage" readonly />
                 </div>
+              <div class="control">
+                <label for="selected-request-proposal-number">Numero da proposta</label>
+                <input id="selected-request-proposal-number" name="selectedRequestProposalNumber" readonly />
+              </div>
               </div>
             </div>
 
@@ -1276,7 +1233,7 @@
                   <option value=""></option>
                   <option value="em_triagem">Em triagem</option>
                   <option value="aguardando_informacoes">Aguardando informações</option>
-                  <option value="em_preparacao_da_proposta">Em preparação da proposta</option>
+                  <option value="em_preparacao_da_proposta">Em Elaboração da Proposta</option>
                   <option value="proposta_finalizada">Proposta finalizada</option>
                 </select>
               </div>
@@ -1422,9 +1379,9 @@
                 <label for="negotiation-status">Status da negociacao</label>
                 <select id="negotiation-status" name="negotiationStatus">
                   <option value=""></option>
-                  <option>Enviada ao vendedor</option>
+                  <option>Recebimento de Proposta</option>
                   <option>Em negociacao</option>
-                  <option>Proposta aceita</option>
+                  <option>Proposta Ganha</option>
                   <option>Perdida</option>
                   <option>Cancelada</option>
                 </select>
@@ -1441,9 +1398,9 @@
                 <label for="commercial-next-stage-code">Mover para etapa</label>
                 <select id="commercial-next-stage-code" name="nextStageCode">
                   <option value=""></option>
-                  <option value="enviada_ao_vendedor">Enviada ao vendedor</option>
+                  <option value="enviada_ao_vendedor">Recebimento de Proposta</option>
                   <option value="em_negociacao">Em negociacao</option>
-                  <option value="proposta_aceita">Proposta aceita</option>
+                  <option value="proposta_aceita">Proposta Ganha</option>
                   <option value="perdida">Perdida</option>
                   <option value="cancelada">Cancelada</option>
                 </select>
@@ -1455,6 +1412,10 @@
               <div class="control control-span-2">
                 <label for="commercial-notes">Observacoes comerciais</label>
                 <textarea id="commercial-notes" name="commercialNotes"></textarea>
+              </div>
+              <div class="control control-span-2">
+                <label for="negotiation-summary">Resumo da interacao do dia</label>
+                <textarea id="negotiation-summary" name="negotiationSummary" placeholder="Ex.: cliente pediu ajuste de escopo, quer retorno ate sexta e validou a faixa de investimento."></textarea>
               </div>
               <div class="control control-span-2">
                 <label for="requested-adjustments">Ajustes solicitados pelo cliente</label>

@@ -6,6 +6,23 @@
   return "info";
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;");
+}
+
+function slugifyKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
 const VIEW_CONFIG = {
   dashboard: {
     title: "Dashboard",
@@ -39,7 +56,7 @@ const VIEW_CONFIG = {
   },
   propostas: {
     title: "Fila de propostas",
-    subtitle: "Triagem, preparação e finalização interna das propostas.",
+    subtitle: "Triagem, elaboração e finalização interna das propostas.",
     showExport: false,
     showNewRequest: false
   },
@@ -82,13 +99,13 @@ const MODULE_STAGE_CONFIG = {
   propostas: [
     { code: "em_triagem", label: "Em triagem" },
     { code: "aguardando_informacoes", label: "Aguardando informações" },
-    { code: "em_preparacao_da_proposta", label: "Em preparação da proposta" },
+    { code: "em_preparacao_da_proposta", label: "Em Elaboração da Proposta" },
     { code: "proposta_finalizada", label: "Proposta finalizada" }
   ],
   negociacoes: [
-    { code: "enviada_ao_vendedor", label: "Enviada ao vendedor" },
+    { code: "enviada_ao_vendedor", label: "Recebimento de Proposta" },
     { code: "em_negociacao", label: "Em negociacao" },
-    { code: "proposta_aceita", label: "Proposta aceita" },
+    { code: "proposta_aceita", label: "Proposta Ganha" },
     { code: "perdida", label: "Perdida" },
     { code: "cancelada", label: "Cancelada" }
   ],
@@ -250,6 +267,8 @@ let lookupsCache = {
   documentTypes: [],
   industries: [],
   serviceTypes: [],
+  workScales: [],
+  equipmentOptionsByService: {},
   lossReasons: [],
   cancelReasons: []
 };
@@ -406,7 +425,7 @@ function renderConversionGrid(items) {
     <div class="conversion-card">
       <strong>${item.label}</strong>
       <div class="conversion-line"><span>Entradas</span><strong>${item.entries}</strong></div>
-      <div class="conversion-line"><span>Aceitas</span><strong>${item.accepted}</strong></div>
+      <div class="conversion-line"><span>Ganhas</span><strong>${item.accepted}</strong></div>
       <div class="conversion-line"><span>Fechadas</span><strong>${item.signed}</strong></div>
       <div class="conversion-line"><span>Conversão final</span><strong>${item.conversionRate}</strong></div>
     </div>
@@ -1019,6 +1038,26 @@ function populateSimpleSelect(selectId, items, valueKey = null, labelKey = null)
   select.innerHTML = options.join("");
 }
 
+function populateDataList(listId, items = []) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  list.innerHTML = (items || []).map((item) => `<option value="${escapeHtml(item)}"></option>`).join("");
+}
+
+function renderServiceTypeChips(items = []) {
+  const container = document.getElementById("service-type-chips");
+  if (!container) return;
+  const selected = new Set(
+    [...container.querySelectorAll('input[name="serviceType"]:checked')].map((input) => input.value)
+  );
+  container.innerHTML = (items || []).map((item) => `
+    <label class="chip">
+      <input type="checkbox" name="serviceType" value="${escapeHtml(item)}" ${selected.has(item) ? "checked" : ""} />
+      ${escapeHtml(item)}
+    </label>
+  `).join("");
+}
+
 function applyLookups(lookups) {
   lookupsCache = lookups;
   populateSimpleSelect("branch-name", lookups.branches || []);
@@ -1037,6 +1076,8 @@ function applyLookups(lookups) {
   populateSimpleSelect("proposal-number-branch-filter", lookups.branches || []);
   populateSimpleSelect("proposal-number-branch-name", lookups.branches || []);
   populateSimpleSelect("proposal-number-lead-source", lookups.leadSources || []);
+  populateDataList("responsible-options", lookups.responsibles || []);
+  renderServiceTypeChips(lookups.serviceTypes || []);
 }
 
 function resetAdminUserForm() {
@@ -1369,17 +1410,19 @@ function renderProposalOnlyContext(detail) {
     nextAction: detail.commercialNextAction || detail.nextAction || detail.commercialAcceptedNote || detail.notes || "Negócio histórico em andamento"
   });
 
-  const history = [
-    {
-      title: detail.stage || "Negócio histórico",
-      meta: `${detail.issueDate || "-"} - ${detail.manager || detail.seller || "Sistema"}`,
-      note: detail.notes || "Registro importado para acompanhamento comercial."
-    }
-  ];
+  const history = detail.history?.length
+    ? [...detail.history]
+    : [
+        {
+          title: detail.stage || "Negócio histórico",
+          meta: `${detail.issueDate || "-"} - ${detail.manager || detail.seller || "Sistema"}`,
+          note: detail.notes || "Registro importado para acompanhamento comercial."
+        }
+      ];
 
   if (detail.commercialAcceptedAt) {
     history.unshift({
-      title: "Proposta aceita",
+      title: "Proposta Ganha",
       meta: `${formatIsoDateToBr(detail.commercialAcceptedAt)} - ${detail.manager || detail.seller || "Sistema"}`,
       note: detail.commercialAcceptedNote || detail.commercialAcceptedScope || "Aceite comercial registrado."
     });
@@ -1513,6 +1556,7 @@ function populateProposalForm(detail) {
   document.getElementById("selected-request-number").value = detail.requestNumber || "";
   document.getElementById("selected-request-company").value = detail.company || "";
   document.getElementById("selected-request-stage").value = detail.stage || "";
+  document.getElementById("selected-request-proposal-number").value = detail.proposalNumber || "Nao gerado";
   document.getElementById("next-stage-code").value = "";
   document.getElementById("triage-owner-name").value = detail.triageOwnerName || currentUser.name || "";
   document.getElementById("triage-owner-email").value = detail.triageOwnerEmail || currentUser.email || "";
@@ -1544,6 +1588,7 @@ function populateCommercialForm(detail) {
   document.getElementById("expected-close-date").value = detail.commercialExpectedCloseDate || detail.expectedCloseDate || "";
   document.getElementById("commercial-next-action").value = detail.commercialNextAction || detail.nextAction || "";
   document.getElementById("commercial-notes").value = detail.commercialNotes || detail.notes || "";
+  document.getElementById("negotiation-summary").value = "";
   document.getElementById("requested-adjustments").value = detail.commercialRequestedAdjustments || detail.requestedAdjustments || "";
   document.getElementById("probability-level").value = detail.commercialProbabilityLevel || detail.probabilityLevel || "";
   document.getElementById("probability-reason").value = detail.commercialProbabilityReason || detail.probabilityReason || "";
@@ -1590,48 +1635,171 @@ function clearTableBodyRows(tbodyId) {
   if (tbody) tbody.innerHTML = "";
 }
 
-function populatePostRows(posts = []) {
-  clearTableBodyRows("post-rows");
-  if (!posts.length) {
-    createPostRow();
-    return;
-  }
-
-  posts.forEach((item) => {
-    createPostRow();
-    const row = document.querySelector("#post-rows tr:last-child");
-    const fields = row.querySelectorAll("input, select");
-    fields[0].value = item.postType || "";
-    fields[1].value = item.qtyPosts ?? item.postQty ?? "";
-    fields[2].value = item.qtyWorkers ?? item.workerQty ?? "";
-    fields[3].value = item.functionName || "";
-    fields[4].value = item.workScale || "";
-    fields[5].value = item.startTime || "";
-    fields[6].value = item.endTime || "";
-    fields[7].value = item.saturdayTime || "";
-    fields[8].value = item.holidayFlag || "";
-    fields[9].value = item.indemnifiedFlag || "";
-    fields[10].value = item.uniformText || "";
-    fields[11].value = item.costAllowanceValue ?? item.costAllowance ?? "";
-  });
+function getSelectedServiceTypes() {
+  return [...document.querySelectorAll('#service-type-chips input[name="serviceType"]:checked')].map((item) => item.value);
 }
 
-function populateEquipmentRows(equipments = []) {
-  clearTableBodyRows("equipment-rows");
-  if (!equipments.length) {
-    createEquipmentRow();
+function collectPostRowsFromDom() {
+  return [...document.querySelectorAll(".post-row")].map((row) => ({
+    postType: row.dataset.service || "",
+    postQty: row.querySelector('[name="postQty[]"]')?.value || "",
+    workerQty: row.querySelector('[name="workerQty[]"]')?.value || "",
+    functionName: row.querySelector('[name="functionName[]"]')?.value || "",
+    workScale: row.querySelector('[name="workScale[]"]')?.value || "",
+    startTime: row.querySelector('[name="startTime[]"]')?.value || "",
+    endTime: row.querySelector('[name="endTime[]"]')?.value || "",
+    saturdayTime: row.querySelector('[name="saturdayTime[]"]')?.value || "",
+    holidayFlag: row.querySelector('[name="holidayFlag[]"]')?.value || "",
+    indemnifiedFlag: row.querySelector('[name="indemnifiedFlag[]"]')?.value || "",
+    uniformText: row.querySelector('[name="uniformText[]"]')?.value || "",
+    costAllowance: row.querySelector('[name="costAllowance[]"]')?.value || ""
+  })).filter((item) => Object.entries(item).some(([key, value]) => key !== "postType" && Boolean(value)));
+}
+
+function collectEquipmentRowsFromDom() {
+  return [...document.querySelectorAll(".equipment-row")].map((row) => ({
+    category: row.dataset.service || "",
+    equipmentName: row.querySelector('[name="equipmentName[]"]')?.value || "",
+    equipmentQty: row.querySelector('[name="equipmentQty[]"]')?.value || "",
+    equipmentNotes: row.querySelector('[name="equipmentNotes[]"]')?.value || ""
+  })).filter((item) => Object.entries(item).some(([key, value]) => key !== "category" && Boolean(value)));
+}
+
+function getOperationServices(posts = [], equipments = []) {
+  return [...new Set([
+    ...getSelectedServiceTypes(),
+    ...posts.map((item) => item.postType || item.category || ""),
+    ...equipments.map((item) => item.category || item.postType || "")
+  ].filter(Boolean))];
+}
+
+function getEquipmentOptionsForService(serviceName) {
+  return lookupsCache.equipmentOptionsByService?.[serviceName] || [];
+}
+
+function buildWorkScaleOptions(selectedValue = "") {
+  const selected = String(selectedValue || "");
+  const options = ['<option value=""></option>'];
+  (lookupsCache.workScales || []).forEach((item) => {
+    options.push(`<option value="${escapeHtml(item)}" ${selected === item ? "selected" : ""}>${escapeHtml(item)}</option>`);
+  });
+  if (selected && !(lookupsCache.workScales || []).includes(selected)) {
+    options.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+  }
+  return options.join("");
+}
+
+function buildPostRowMarkup(serviceName, item = {}) {
+  return `
+    <tr class="post-row" data-service="${escapeHtml(serviceName)}">
+      <td>${escapeHtml(serviceName)}</td>
+      <td><input name="postQty[]" type="number" min="0" value="${escapeHtml(item.qtyPosts ?? item.postQty ?? "")}" /></td>
+      <td><input name="workerQty[]" type="number" min="0" value="${escapeHtml(item.qtyWorkers ?? item.workerQty ?? "")}" /></td>
+      <td><input name="functionName[]" value="${escapeHtml(item.functionName || "")}" /></td>
+      <td><select name="workScale[]">${buildWorkScaleOptions(item.workScale || "")}</select></td>
+      <td><input name="startTime[]" type="time" value="${escapeHtml(item.startTime || "")}" /></td>
+      <td><input name="endTime[]" type="time" value="${escapeHtml(item.endTime || "")}" /></td>
+      <td><input name="saturdayTime[]" type="time" value="${escapeHtml(item.saturdayTime || "")}" /></td>
+      <td><select name="holidayFlag[]"><option value=""></option><option ${item.holidayFlag === "Sim" ? "selected" : ""}>Sim</option><option ${item.holidayFlag === "Nao" ? "selected" : ""}>Nao</option></select></td>
+      <td><select name="indemnifiedFlag[]"><option value=""></option><option ${item.indemnifiedFlag === "Sim" ? "selected" : ""}>Sim</option><option ${item.indemnifiedFlag === "Nao" ? "selected" : ""}>Nao</option></select></td>
+      <td><select name="uniformText[]"><option value=""></option><option ${item.uniformText === "Padrao" ? "selected" : ""}>Padrao</option><option ${item.uniformText === "Social" ? "selected" : ""}>Social</option></select></td>
+      <td><input name="costAllowance[]" type="number" min="0" step="0.01" value="${escapeHtml(item.costAllowanceValue ?? item.costAllowance ?? "")}" /></td>
+      <td><button type="button" class="table-action delete-post-row">Excluir</button></td>
+    </tr>
+  `;
+}
+
+function buildEquipmentRowMarkup(serviceName, item = {}) {
+  const dataListId = `equipment-options-${slugifyKey(serviceName)}`;
+  return `
+    <tr class="equipment-row" data-service="${escapeHtml(serviceName)}">
+      <td>${escapeHtml(serviceName)}</td>
+      <td><input name="equipmentName[]" list="${dataListId}" value="${escapeHtml(item.equipmentName || "")}" /></td>
+      <td><input name="equipmentQty[]" type="number" min="0" value="${escapeHtml(item.quantity ?? item.equipmentQty ?? "")}" /></td>
+      <td><input name="equipmentNotes[]" value="${escapeHtml(item.notes ?? item.equipmentNotes ?? "")}" /></td>
+      <td><button type="button" class="table-action delete-equipment-row">Excluir</button></td>
+    </tr>
+  `;
+}
+
+function renderServiceOperationGroups(posts = [], equipments = []) {
+  const container = document.getElementById("service-operation-groups");
+  if (!container) return;
+
+  const services = getOperationServices(posts, equipments);
+  if (!services.length) {
+    container.innerHTML = '<div class="service-operation-empty">Selecione pelo menos um tipo de serviço para organizar postos e equipamentos.</div>';
     return;
   }
 
-  equipments.forEach((item) => {
-    createEquipmentRow();
-    const row = document.querySelector("#equipment-rows tr:last-child");
-    const fields = row.querySelectorAll("input, select");
-    fields[0].value = item.category || "";
-    fields[1].value = item.equipmentName || "";
-    fields[2].value = item.quantity ?? item.equipmentQty ?? "";
-    fields[3].value = item.notes ?? item.equipmentNotes ?? "";
-  });
+  container.innerHTML = services.map((serviceName) => {
+    const servicePosts = posts.filter((item) => String(item.postType || "").toLowerCase() === String(serviceName).toLowerCase());
+    const serviceEquipments = equipments.filter((item) => String(item.category || "").toLowerCase() === String(serviceName).toLowerCase());
+    const equipmentOptions = getEquipmentOptionsForService(serviceName);
+    const dataListId = `equipment-options-${slugifyKey(serviceName)}`;
+
+    return `
+      <section class="service-operation-group">
+        <div class="service-operation-head">
+          <h4>${escapeHtml(serviceName)}</h4>
+          <span>Itens da requisição para este serviço</span>
+        </div>
+        <div class="table-wrap">
+          <table class="dense-table postos-table">
+            <thead>
+              <tr>
+                <th>Serviço</th>
+                <th>Qtd Postos</th>
+                <th>Qtd Func.</th>
+                <th>Funcao</th>
+                <th>Escala</th>
+                <th>Entrada</th>
+                <th>Saida</th>
+                <th>Sabado</th>
+                <th>Feriado</th>
+                <th>Indenizado</th>
+                <th>Uniforme</th>
+                <th>Ajuda de custos</th>
+                <th>Acao</th>
+              </tr>
+            </thead>
+            <tbody data-post-service="${escapeHtml(serviceName)}">
+              ${(servicePosts.length ? servicePosts : [{}]).map((item) => buildPostRowMarkup(serviceName, item)).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div class="button-row inline-actions">
+          <button type="button" class="secondary add-post-service-row" data-service="${escapeHtml(serviceName)}">Adicionar posto</button>
+        </div>
+        <div class="table-wrap">
+          <datalist id="${dataListId}">
+            ${equipmentOptions.map((item) => `<option value="${escapeHtml(item)}"></option>`).join("")}
+          </datalist>
+          <table class="dense-table equipamentos-table">
+            <thead>
+              <tr>
+                <th>Serviço</th>
+                <th>Equipamento</th>
+                <th>Quantidade</th>
+                <th>Observacao</th>
+                <th>Acao</th>
+              </tr>
+            </thead>
+            <tbody data-equipment-service="${escapeHtml(serviceName)}">
+              ${(serviceEquipments.length ? serviceEquipments : [{}]).map((item) => buildEquipmentRowMarkup(serviceName, item)).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div class="button-row inline-actions">
+          <button type="button" class="secondary add-equipment-service-row" data-service="${escapeHtml(serviceName)}">Adicionar equipamento</button>
+        </div>
+      </section>
+    `;
+  }).join("");
+}
+
+function syncServiceOperationGroups() {
+  renderServiceOperationGroups(collectPostRowsFromDom(), collectEquipmentRowsFromDom());
 }
 
 function renderPendingRequestBlock(detail) {
@@ -1666,10 +1834,7 @@ function resetRequestForm() {
   renderPendingRequestBlock(null);
   setCheckedValues("serviceType", []);
   setCheckedValues("transportOption", []);
-  clearTableBodyRows("post-rows");
-  clearTableBodyRows("equipment-rows");
-  createPostRow();
-  createEquipmentRow();
+  renderServiceOperationGroups();
   syncLoggedUserIntoForms();
 }
 
@@ -1720,8 +1885,7 @@ function populateRequestForm(detail) {
       .filter((item) => item.benefitType === "vale_transporte" && item.optionLabel)
       .map((item) => item.optionLabel)
   );
-  populatePostRows(detail.posts || []);
-  populateEquipmentRows(detail.equipments || []);
+  renderServiceOperationGroups(detail.posts || [], detail.equipments || []);
   renderPendingRequestBlock(detail);
 }
 
@@ -1757,6 +1921,12 @@ function validateProposalPayload(payload) {
   if (!payload.triageOwnerEmail) missing.push("Email do responsável");
   if (!payload.triageStatus) missing.push("Status da triagem");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
+  if (
+    payload.nextStageCode === "proposta_finalizada"
+    && document.getElementById("selected-request-proposal-number").value === "Nao gerado"
+  ) {
+    missing.push("Gere o numero da proposta antes de finalizar");
+  }
   return missing;
 }
 
@@ -1774,6 +1944,7 @@ function buildCommercialPayload() {
     nextAction: form.get("nextAction"),
     expectedCloseDate: form.get("expectedCloseDate"),
     commercialNotes: form.get("commercialNotes"),
+    negotiationSummary: form.get("negotiationSummary"),
     requestedAdjustments: form.get("requestedAdjustments"),
     probabilityLevel: form.get("probabilityLevel"),
     probabilityReason: form.get("probabilityReason"),
@@ -1853,87 +2024,12 @@ async function collectFiles(inputId, multiple = true) {
   return multiple ? items : (items[0] || null);
 }
 
-function createPostRow() {
-  const row = document.createElement("tr");
-  row.innerHTML = `
-    <td>
-      <select name="postType[]">
-        <option>Seguranca</option>
-        <option>Portaria</option>
-        <option>Limpeza</option>
-        <option>Jardinagem</option>
-        <option>Monitoramento</option>
-        <option>Manutencao</option>
-      </select>
-    </td>
-    <td><input name="postQty[]" type="number" min="0" /></td>
-    <td><input name="workerQty[]" type="number" min="0" /></td>
-    <td><input name="functionName[]" /></td>
-    <td><input name="workScale[]" /></td>
-    <td><input name="startTime[]" type="time" /></td>
-    <td><input name="endTime[]" type="time" /></td>
-    <td><input name="saturdayTime[]" type="time" /></td>
-    <td><select name="holidayFlag[]"><option value=""></option><option>Sim</option><option>Nao</option></select></td>
-    <td><select name="indemnifiedFlag[]"><option value=""></option><option>Sim</option><option>Nao</option></select></td>
-    <td><select name="uniformText[]"><option value=""></option><option>Padrao</option><option>Social</option></select></td>
-    <td><input name="costAllowance[]" type="number" min="0" step="0.01" /></td>
-    <td><button type="button" class="table-action delete-post-row">Excluir</button></td>
-  `;
-  document.getElementById("post-rows").appendChild(row);
-}
-
-function createEquipmentRow() {
-  const row = document.createElement("tr");
-  row.innerHTML = `
-    <td>
-      <select name="equipmentCategory[]">
-        <option>Limpeza</option>
-        <option>Jardinagem</option>
-        <option>Seguranca</option>
-        <option>Portaria</option>
-        <option>Manutencao</option>
-        <option>Outros</option>
-      </select>
-    </td>
-    <td><input name="equipmentName[]" /></td>
-    <td><input name="equipmentQty[]" type="number" min="0" /></td>
-    <td><input name="equipmentNotes[]" /></td>
-    <td><button type="button" class="table-action delete-equipment-row">Excluir</button></td>
-  `;
-  document.getElementById("equipment-rows").appendChild(row);
-}
-
 async function buildRequestPayload() {
   const form = document.getElementById("request-form");
   const data = new FormData(form);
-  const serviceTypes = [...document.querySelectorAll('input[name="serviceType"]:checked')].map((item) => item.value);
-  const posts = [...document.querySelectorAll("#post-rows tr")].map((row) => {
-    const fields = row.querySelectorAll("input, select");
-    return {
-      postType: fields[0].value,
-      postQty: fields[1].value,
-      workerQty: fields[2].value,
-      functionName: fields[3].value,
-      workScale: fields[4].value,
-      startTime: fields[5].value,
-      endTime: fields[6].value,
-      saturdayTime: fields[7].value,
-      holidayFlag: fields[8].value,
-      indemnifiedFlag: fields[9].value,
-      uniformText: fields[10].value,
-      costAllowance: fields[11].value
-    };
-  }).filter((item) => Object.values(item).some(Boolean));
-
-  const equipments = [...document.querySelectorAll("#equipment-rows tr")].map((row) => {
-    const fields = row.querySelectorAll("input, select");
-    return {
-      category: fields[0].value,
-      equipmentName: fields[1].value,
-      equipmentQty: fields[2].value,
-      equipmentNotes: fields[3].value
-    };
-  }).filter((item) => Object.values(item).some(Boolean));
+  const serviceTypes = getSelectedServiceTypes();
+  const posts = collectPostRowsFromDom();
+  const equipments = collectEquipmentRowsFromDom();
 
   return {
     requestId: data.get("requestId"),
@@ -2206,8 +2302,7 @@ function applyAuthenticatedUser(user) {
 
 function setupRequestForm() {
   syncLoggedUserIntoForms();
-  createPostRow();
-  createEquipmentRow();
+  renderServiceOperationGroups();
   document.getElementById("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const email = document.getElementById("login-email").value;
@@ -2235,10 +2330,16 @@ function setupRequestForm() {
     }
   });
 
-  document.getElementById("add-post-row").addEventListener("click", createPostRow);
-  document.getElementById("add-equipment-row").addEventListener("click", createEquipmentRow);
+  document.getElementById("request-form").addEventListener("change", (event) => {
+    if (event.target.name === "serviceType") {
+      syncServiceOperationGroups();
+    }
+  });
   document.getElementById("preview-request-form").addEventListener("click", async () => {
     await renderRequestFormPreview();
+  });
+  document.getElementById("zip-code").addEventListener("blur", async () => {
+    await autofillAddressFromZipCode();
   });
   document.getElementById("go-to-request-form").addEventListener("click", () => {
     setActiveView("solicitacoes");
@@ -2348,15 +2449,27 @@ function setupRequestForm() {
   });
 
   document.addEventListener("click", (event) => {
+    if (event.target.classList.contains("add-post-service-row")) {
+      const tbody = document.querySelector(`[data-post-service="${event.target.dataset.service}"]`);
+      if (tbody) tbody.insertAdjacentHTML("beforeend", buildPostRowMarkup(event.target.dataset.service));
+    }
+
+    if (event.target.classList.contains("add-equipment-service-row")) {
+      const tbody = document.querySelector(`[data-equipment-service="${event.target.dataset.service}"]`);
+      if (tbody) tbody.insertAdjacentHTML("beforeend", buildEquipmentRowMarkup(event.target.dataset.service));
+    }
+
     if (event.target.classList.contains("delete-post-row")) {
-      const rows = document.querySelectorAll("#post-rows tr");
+      const tbody = event.target.closest("tbody");
+      const rows = tbody ? tbody.querySelectorAll(".post-row") : [];
       if (rows.length > 1) {
         event.target.closest("tr").remove();
       }
     }
 
     if (event.target.classList.contains("delete-equipment-row")) {
-      const rows = document.querySelectorAll("#equipment-rows tr");
+      const tbody = event.target.closest("tbody");
+      const rows = tbody ? tbody.querySelectorAll(".equipment-row") : [];
       if (rows.length > 1) {
         event.target.closest("tr").remove();
       }
@@ -2384,6 +2497,26 @@ async function loadJson(url) {
 
 async function loadRequestAttachments(requestId) {
   return loadJson(`/api/requests/${requestId}/attachments`);
+}
+
+async function autofillAddressFromZipCode() {
+  const zipCodeInput = document.getElementById("zip-code");
+  const zipCode = String(zipCodeInput?.value || "").replace(/\D/g, "");
+  if (zipCode.length !== 8) return;
+
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${zipCode}/json/`);
+    if (!response.ok) return;
+    const payload = await response.json();
+    if (payload?.erro) return;
+
+    document.getElementById("address").value = payload.logradouro || document.getElementById("address").value;
+    document.getElementById("district").value = payload.bairro || document.getElementById("district").value;
+    document.getElementById("city").value = payload.localidade || document.getElementById("city").value;
+    document.getElementById("state").value = payload.uf || document.getElementById("state").value;
+  } catch (error) {
+    console.warn("Nao foi possivel consultar o CEP informado.", error);
+  }
 }
 
 function showLoginScreen() {
