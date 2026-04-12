@@ -30,6 +30,13 @@ function normalizeServiceLabel(value) {
   return text;
 }
 
+function generateRequestSubmissionKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const VIEW_CONFIG = {
   dashboard: {
     title: "Dashboard",
@@ -2004,6 +2011,7 @@ function resetRequestForm() {
   const form = document.getElementById("request-form");
   form.reset();
   document.getElementById("request-id").value = "";
+  document.getElementById("request-submission-key").value = generateRequestSubmissionKey();
   document.getElementById("request-form-preview").textContent = "";
   document.getElementById("save-request-button").dataset.idleLabel = "Salvar solicitacao";
   setRequestSaveState(false);
@@ -2016,6 +2024,7 @@ function resetRequestForm() {
 
 function populateRequestForm(detail) {
   document.getElementById("request-id").value = detail.id || "";
+  document.getElementById("request-submission-key").value = detail.id ? "" : generateRequestSubmissionKey();
   document.getElementById("request-date").value = detail.requestDateIso || "";
   document.getElementById("deadline-date").value = detail.deadlineDateIso || "";
   document.getElementById("seller-name").value = detail.seller || currentUser.name || "";
@@ -2210,6 +2219,7 @@ async function buildRequestPayload() {
 
   return {
     requestId: data.get("requestId"),
+    submissionKey: data.get("submissionKey"),
     requestDate: data.get("requestDate"),
     deadlineDate: data.get("deadlineDate"),
     sellerName: data.get("sellerName"),

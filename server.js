@@ -1019,6 +1019,18 @@ async function ensureWorkflowStageAccessColumn() {
   `);
 }
 
+async function ensureRequestSubmissionKeyColumn() {
+  await query(`
+    ALTER TABLE requests
+    ADD COLUMN IF NOT EXISTS submission_key VARCHAR(120)
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_requests_submission_key
+    ON requests(submission_key)
+  `);
+}
+
 async function ensureProposalRegistryColumns() {
   await query(`
     ALTER TABLE proposal_registry
@@ -2218,6 +2230,25 @@ async function createRequest(payload, session) {
   }
 
   return withTransaction(async (client) => {
+    const submissionKey = String(payload.submissionKey || "").trim() || null;
+    if (submissionKey) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [submissionKey]);
+      const existingBySubmissionKey = await client.query(
+        `SELECT id, request_number
+         FROM requests
+         WHERE submission_key = $1`,
+        [submissionKey]
+      );
+
+      if (existingBySubmissionKey.rows[0]) {
+        return {
+          id: existingBySubmissionKey.rows[0].id,
+          requestNumber: existingBySubmissionKey.rows[0].request_number,
+          reusedSubmission: true
+        };
+      }
+    }
+
     const sellerUserId = await ensureUser(client, payload.sellerName, payload.sellerEmail);
     const stageId = await getStageId(client, "em_triagem");
 
@@ -2253,10 +2284,11 @@ async function createRequest(payload, session) {
     const requestResult = await client.query(
       `INSERT INTO requests (
         request_number, client_id, seller_user_id, current_stage_id, current_owner_user_id,
-        request_date, deadline_date, branch_name, lead_source, initial_note, general_notes
+        request_date, deadline_date, branch_name, lead_source, initial_note, general_notes,
+        submission_key
       ) VALUES (
         $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11
+        $6, $7, $8, $9, $10, $11, $12
       ) RETURNING id, request_number`,
       [
         requestNumber,
@@ -2269,7 +2301,8 @@ async function createRequest(payload, session) {
         payload.branchName || null,
         payload.leadSource || null,
         payload.initialNote || null,
-        payload.generalNotes || null
+        payload.generalNotes || null,
+        submissionKey
       ]
     );
 
@@ -5970,6 +6003,7 @@ ensurePasswordColumn()
   .then(() => ensureMustChangePasswordColumn())
   .then(() => ensureModuleAccessColumn())
   .then(() => ensureWorkflowStageAccessColumn())
+  .then(() => ensureRequestSubmissionKeyColumn())
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureWorkflowStageNames())
   .then(() => ensureAppLookupOptionsTable())
