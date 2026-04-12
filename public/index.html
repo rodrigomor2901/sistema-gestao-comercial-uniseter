@@ -4,54 +4,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sistema de Gestão Comercial</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <section id="login-screen" class="login-screen">
-    <div class="login-shell">
-      <div class="login-highlight">
-        <div class="login-badge">Identidade visual inspirada em proteção e inteligência operacional</div>
-        <h1>Uma operação comercial com presença, segurança e clareza.</h1>
-        <p>
-          A nova linguagem visual parte do azul profundo e dos detalhes dourados da referência enviada,
-          preservando a identidade original da Uniseter e trazendo mais sofisticação para login, navegação e gestão diária.
-        </p>
-        <div class="login-feature-list">
-          <div class="login-feature">
-            <strong>Fluxo comercial completo</strong>
-            <span>Solicitações, propostas, negociações e contratos em sequência contínua.</span>
-          </div>
-          <div class="login-feature">
-            <strong>Leitura rápida do pipeline</strong>
-            <span>Painéis, filas e cards com contraste melhor e foco no que precisa de ação.</span>
-          </div>
-          <div class="login-feature">
-            <strong>Administração mais simples</strong>
-            <span>Listas configuráveis centralizadas para ajustar campos sem depender de código.</span>
-          </div>
+    <div class="login-panel">
+      <img src="/unisetter-logo-white-transparent.png" alt="Grupo Uniseter" class="login-screen-logo" />
+      <div class="login-title">Gestão Comercial - Uniseter</div>
+      <form id="login-form" class="login-form">
+        <div class="control">
+          <label for="login-email">Email</label>
+          <input id="login-email" name="email" type="email" autocomplete="username" />
         </div>
-      </div>
-
-      <div class="login-panel">
-        <img src="/unisetter-logo-white-transparent.png" alt="Grupo Uniseter" class="login-screen-logo" />
-        <div class="login-title">Gestão Comercial - Uniseter</div>
-        <div class="login-panel-copy">Acesse o ambiente para acompanhar o ciclo completo da proposta até o contrato assinado.</div>
-        <form id="login-form" class="login-form">
-          <div class="control">
-            <label for="login-email">Email</label>
-            <input id="login-email" name="email" type="email" autocomplete="username" />
-          </div>
-          <div class="control">
-            <label for="login-password">Senha</label>
-            <input id="login-password" name="password" type="password" autocomplete="current-password" />
-          </div>
-          <button type="submit" class="primary login-submit">Entrar</button>
-          <div id="login-feedback" class="muted"></div>
-        </form>
-      </div>
+        <div class="control">
+          <label for="login-password">Senha</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="primary login-submit">Entrar</button>
+        <div id="login-feedback" class="muted"></div>
+      </form>
     </div>
   </section>
 
