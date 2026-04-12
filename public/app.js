@@ -23,6 +23,13 @@ function slugifyKey(value) {
     .toLowerCase();
 }
 
+function normalizeServiceLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.toLowerCase() === "seguranca") return "Vigilancia";
+  return text;
+}
+
 const VIEW_CONFIG = {
   dashboard: {
     title: "Dashboard",
@@ -272,6 +279,7 @@ let negotiationFiltersState = {
 let proposalNumberRowsCache = [];
 let proposalNumberAllRowsCache = [];
 let crmProposalRequestsCache = [];
+let requestSaveInFlight = false;
 let lookupsCache = {
   branches: [],
   responsibles: [],
@@ -1181,9 +1189,10 @@ function renderServiceTypeChips(items = []) {
   const container = document.getElementById("service-type-chips");
   if (!container) return;
   const selected = new Set(
-    [...container.querySelectorAll('input[name="serviceType"]:checked')].map((input) => input.value)
+    [...container.querySelectorAll('input[name="serviceType"]:checked')].map((input) => normalizeServiceLabel(input.value))
   );
-  container.innerHTML = (items || []).map((item) => `
+  const normalizedItems = [...new Set((items || []).map((item) => normalizeServiceLabel(item)).filter(Boolean))];
+  container.innerHTML = normalizedItems.map((item) => `
     <label class="chip">
       <input type="checkbox" name="serviceType" value="${escapeHtml(item)}" ${selected.has(item) ? "checked" : ""} />
       ${escapeHtml(item)}
@@ -1604,6 +1613,44 @@ function formatSummaryValue(value) {
   return String(value);
 }
 
+function buildServiceOperationSummary(posts = [], equipments = []) {
+  const services = getOperationServices(posts, equipments);
+  if (!services.length) return ["Nenhum serviço informado."];
+
+  return services.map((serviceName) => {
+    const servicePosts = posts.filter((item) => normalizeServiceLabel(item.postType || item.category || "") === serviceName);
+    const serviceEquipments = equipments.filter((item) => normalizeServiceLabel(item.category || item.postType || "") === serviceName);
+    const postLines = servicePosts.length
+      ? servicePosts.map((item) => [
+        `Postos: ${formatSummaryValue(item.qtyPosts ?? item.postQty)}`,
+        `Funcionarios: ${formatSummaryValue(item.qtyWorkers ?? item.workerQty)}`,
+        `Funcao: ${formatSummaryValue(item.functionName)}`,
+        `Escala: ${formatSummaryValue(item.workScale)}`,
+        `Entrada: ${formatSummaryValue(item.startTime)}`,
+        `Saida: ${formatSummaryValue(item.endTime)}`,
+        `Sabado entrada: ${formatSummaryValue(item.saturdayTime)}`,
+        `Feriado: ${formatSummaryValue(item.holidayFlag)}`,
+        `Indenizado: ${formatSummaryValue(item.indemnifiedFlag)}`,
+        `Uniforme: ${formatSummaryValue(item.uniformText)}`,
+        `Ajuda de custo: ${formatSummaryValue(item.costAllowanceValue ?? item.costAllowance)}`
+      ].join(" | "))
+      : ["Nenhum posto informado."];
+    const equipmentLines = serviceEquipments.length
+      ? serviceEquipments.map((item) => [
+        `Equipamento: ${formatSummaryValue(item.equipmentName)}`,
+        `Quantidade: ${formatSummaryValue(item.quantity ?? item.equipmentQty)}`,
+        `Observacao: ${formatSummaryValue(item.notes ?? item.equipmentNotes)}`
+      ].join(" | "))
+      : ["Nenhum equipamento informado."];
+
+    return `${serviceName}
+Postos:
+- ${postLines.join("\n- ")}
+Equipamentos:
+- ${equipmentLines.join("\n- ")}`;
+  });
+}
+
 function humanizeWorkflowText(value) {
   return formatSummaryValue(value)
     .replaceAll("_", " ")
@@ -1624,7 +1671,7 @@ function renderSummaryCard(title, items) {
     <div class="request-summary-card">
       <h4>${title}</h4>
       <ul class="request-summary-list">
-        ${items.map((item) => `<li>${item}</li>`).join("")}
+        ${items.map((item) => `<li>${String(item).replaceAll("\n", "<br>")}</li>`).join("")}
       </ul>
     </div>
   `;
@@ -1634,7 +1681,7 @@ function renderProposalRequestSummary(detail) {
   const container = document.getElementById("proposal-request-summary");
   if (!container) return;
 
-  const normalizedServices = (detail.services || []).map((item) => humanizeWorkflowText(item.serviceType));
+  const normalizedServices = [...new Set((detail.services || []).map((item) => normalizeServiceLabel(humanizeWorkflowText(item.serviceType))).filter(Boolean))];
   const benefits = (detail.benefits || []).map((item) => {
     const parts = [humanizeWorkflowText(item.benefitType)];
     if (item.optionLabel) parts.push(item.optionLabel);
@@ -1642,31 +1689,12 @@ function renderProposalRequestSummary(detail) {
     if (item.notes) parts.push(item.notes);
     return parts.join(" | ");
   });
-  const posts = (detail.posts || []).map((item) => [
-    `Tipo: ${humanizeWorkflowText(item.postType)}`,
-    `Postos: ${formatSummaryValue(item.qtyPosts)}`,
-    `Funcionarios: ${formatSummaryValue(item.qtyWorkers)}`,
-    `Funcao: ${formatSummaryValue(item.functionName)}`,
-    `Escala: ${formatSummaryValue(item.workScale)}`,
-    `Horario: ${formatSummaryValue(item.startTime)} as ${formatSummaryValue(item.endTime)}`,
-    `Sabado: ${formatSummaryValue(item.saturdayTime)}`,
-    `Feriado: ${formatSummaryValue(item.holidayFlag)}`,
-    `Indenizado: ${formatSummaryValue(item.indemnifiedFlag)}`,
-    `Uniforme: ${formatSummaryValue(item.uniformText)}`,
-    `Ajuda de custo: ${formatSummaryValue(item.costAllowanceValue)}`
-  ].join(" | "));
-  const equipments = (detail.equipments || []).map((item) => [
-    `Categoria: ${humanizeWorkflowText(item.category)}`,
-    `Equipamento: ${formatSummaryValue(item.equipmentName)}`,
-    `Quantidade: ${formatSummaryValue(item.quantity)}`,
-    `Observacao: ${formatSummaryValue(item.notes)}`
-  ].join(" | "));
+  const operationSummary = buildServiceOperationSummary(detail.posts || [], detail.equipments || []);
 
   container.innerHTML = [
     renderSummaryCard("Tipos de servico", normalizedServices),
     renderSummaryCard("Beneficios", benefits),
-    renderSummaryCard("Postos / funcao / escala / horario", posts),
-    renderSummaryCard("Equipamentos", equipments)
+    renderSummaryCard("Operacao por servico", operationSummary)
   ].join("");
 }
 
@@ -1770,12 +1798,16 @@ function clearTableBodyRows(tbodyId) {
 }
 
 function getSelectedServiceTypes() {
-  return [...document.querySelectorAll('#service-type-chips input[name="serviceType"]:checked')].map((item) => item.value);
+  return [...new Set(
+    [...document.querySelectorAll('#service-type-chips input[name="serviceType"]:checked')]
+      .map((item) => normalizeServiceLabel(item.value))
+      .filter(Boolean)
+  )];
 }
 
 function collectPostRowsFromDom() {
   return [...document.querySelectorAll(".post-row")].map((row) => ({
-    postType: row.dataset.service || "",
+    postType: normalizeServiceLabel(row.dataset.service || ""),
     postQty: row.querySelector('[name="postQty[]"]')?.value || "",
     workerQty: row.querySelector('[name="workerQty[]"]')?.value || "",
     functionName: row.querySelector('[name="functionName[]"]')?.value || "",
@@ -1792,7 +1824,7 @@ function collectPostRowsFromDom() {
 
 function collectEquipmentRowsFromDom() {
   return [...document.querySelectorAll(".equipment-row")].map((row) => ({
-    category: row.dataset.service || "",
+    category: normalizeServiceLabel(row.dataset.service || ""),
     equipmentName: row.querySelector('[name="equipmentName[]"]')?.value || "",
     equipmentQty: row.querySelector('[name="equipmentQty[]"]')?.value || "",
     equipmentNotes: row.querySelector('[name="equipmentNotes[]"]')?.value || ""
@@ -1802,13 +1834,13 @@ function collectEquipmentRowsFromDom() {
 function getOperationServices(posts = [], equipments = []) {
   return [...new Set([
     ...getSelectedServiceTypes(),
-    ...posts.map((item) => item.postType || item.category || ""),
-    ...equipments.map((item) => item.category || item.postType || "")
+    ...posts.map((item) => normalizeServiceLabel(item.postType || item.category || "")),
+    ...equipments.map((item) => normalizeServiceLabel(item.category || item.postType || ""))
   ].filter(Boolean))];
 }
 
 function getEquipmentOptionsForService(serviceName) {
-  return lookupsCache.equipmentOptionsByService?.[serviceName] || [];
+  return lookupsCache.equipmentOptionsByService?.[normalizeServiceLabel(serviceName)] || [];
 }
 
 function buildWorkScaleOptions(selectedValue = "") {
@@ -1889,7 +1921,7 @@ function renderServiceOperationGroups(posts = [], equipments = []) {
                 <th>Escala</th>
                 <th>Entrada</th>
                 <th>Saida</th>
-                <th>Sabado</th>
+                <th>Sabado entrada</th>
                 <th>Feriado</th>
                 <th>Indenizado</th>
                 <th>Uniforme</th>
@@ -1959,12 +1991,22 @@ Respondido em: ${pendingInfo.respondedAt || "-"}`;
   responseNote.value = pendingInfo.responseNote || "";
 }
 
+function setRequestSaveState(inFlight) {
+  requestSaveInFlight = Boolean(inFlight);
+  const button = document.getElementById("save-request-button");
+  if (!button) return;
+  const idleLabel = button.dataset.idleLabel || "Salvar solicitacao";
+  button.disabled = requestSaveInFlight;
+  button.textContent = requestSaveInFlight ? "Salvando..." : idleLabel;
+}
+
 function resetRequestForm() {
   const form = document.getElementById("request-form");
   form.reset();
   document.getElementById("request-id").value = "";
   document.getElementById("request-form-preview").textContent = "";
-  document.getElementById("save-request-button").textContent = "Salvar solicitacao";
+  document.getElementById("save-request-button").dataset.idleLabel = "Salvar solicitacao";
+  setRequestSaveState(false);
   renderPendingRequestBlock(null);
   setCheckedValues("serviceType", []);
   setCheckedValues("transportOption", []);
@@ -2008,9 +2050,10 @@ function populateRequestForm(detail) {
   document.getElementById("food-notes").value = detail.benefits?.find((item) => item.benefitType === "va")?.notes || "";
   document.getElementById("general-notes").value = detail.generalNotes || "";
   document.getElementById("technical-doc-notes").value = detail.technicalDocNotes || "";
-  document.getElementById("save-request-button").textContent = detail.stageCode === "aguardando_informacoes"
+  document.getElementById("save-request-button").dataset.idleLabel = detail.stageCode === "aguardando_informacoes"
     ? "Salvar correções e devolver para triagem"
     : "Salvar solicitacao";
+  setRequestSaveState(false);
 
   setCheckedValues("serviceType", (detail.services || []).map((item) => item.serviceType));
   setCheckedValues(
@@ -2229,10 +2272,12 @@ function validateRequestPayload(payload) {
 
 async function renderRequestFormPreview() {
   const payload = await buildRequestPayload();
+  const operationSummary = buildServiceOperationSummary(payload.posts, payload.equipments);
 
   const preview = `Razao social: ${payload.legalName || "-"}
 Nome fantasia: ${payload.tradeName || "-"}
 CNPJ: ${payload.cnpj || "-"}
+Email de faturamento: ${payload.mainEmail || "-"}
 Contato principal: ${payload.primaryContactName || "-"}
 Empresa / cliente: ${payload.legalName || "-"}
 Vendedor: ${payload.sellerName || "-"}
@@ -2243,11 +2288,8 @@ Beneficios:
 Refeicao / VR: ${payload.mealNotes || "-"}
 VA: ${payload.foodNotes || "-"}
 
-Postos:
-${payload.posts.map((item) => Object.values(item).join(" | ")).join("\n") || "-"}
-
-Equipamentos:
-${payload.equipments.map((item) => Object.values(item).join(" | ")).join("\n") || "-"}
+Operacao por servico:
+${operationSummary.join("\n\n") || "-"}
 
 Observacoes gerais:
 ${payload.generalNotes || "-"}`;
@@ -2995,6 +3037,8 @@ async function bootstrap() {
 
   document.getElementById("request-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (requestSaveInFlight) return;
+
     const payload = await buildRequestPayload();
     await renderRequestFormPreview();
     const missing = validateRequestPayload(payload);
@@ -3005,6 +3049,7 @@ async function bootstrap() {
     }
 
     try {
+      setRequestSaveState(true);
       const requestId = Number(payload.requestId || 0);
       const isEditing = Number.isFinite(requestId) && requestId > 0;
       const targetUrl = isEditing ? `/api/requests/${requestId}` : "/api/requests";
@@ -3025,7 +3070,11 @@ async function bootstrap() {
       reportRowsCache = await refreshReports();
       await refreshCrmProposalRequests();
       renderAllStageBoards(reportRowsCache);
-      const detailId = result.request?.id || refreshed[0]?.id;
+      const detailId = result.request?.id || refreshed.find((item) => String(item.requestNumber) === String(savedNumber))?.id || refreshed[0]?.id;
+      const role = ROLE_CONFIG[currentRole] || ROLE_CONFIG.diretoria;
+      const canOpenProposalQueue = role.views.includes("propostas")
+        && isViewAllowedByModule("propostas")
+        && isViewAllowedByStage("propostas");
 
       if (result.returnedToTriage) {
         selectedRequestId = null;
@@ -3039,14 +3088,20 @@ async function bootstrap() {
         populateCommercialForm(requestDetailFallback());
         populateContractForm(requestDetailFallback());
         populateProposalNumberLinkedRequest(null);
-        setActiveView("solicitacoes");
+        setActiveView(canOpenProposalQueue ? "propostas" : "solicitacoes");
       } else if (detailId) {
         await selectRequest(detailId);
+        if (!isEditing) {
+          setActiveView(canOpenProposalQueue ? "propostas" : "solicitacoes");
+          scrollToWorkflowForm(canOpenProposalQueue ? "propostas" : "solicitacoes");
+        }
       }
 
       alert(result.message || `Solicitacao salva com sucesso: ${savedNumber}`);
     } catch (error) {
       alert(`Nao foi possivel salvar a solicitacao: ${error.message}`);
+    } finally {
+      setRequestSaveState(false);
     }
   });
 

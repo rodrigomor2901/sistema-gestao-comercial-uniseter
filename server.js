@@ -44,7 +44,6 @@ const INDUSTRY_OPTIONS = [
 ];
 const SERVICE_TYPE_OPTIONS = [
   "Vigilancia",
-  "Seguranca",
   "Portaria",
   "Limpeza",
   "Jardinagem",
@@ -59,19 +58,6 @@ const SERVICE_TYPE_OPTIONS = [
 const WORK_SCALE_OPTIONS = ["12 x 36", "6 x 1", "6 x 2", "5 x 1", "5 x 2", "4 x 2", "SDF", "Sab/Dom", "Dom", "Sab", "Feriado"];
 const EQUIPMENT_OPTIONS_BY_SERVICE = {
   Vigilancia: [
-    "Acorda Vigia Alabella",
-    "Arma calibre 38 e municao",
-    "Arma Pistola 380 e municao",
-    "Lanterna recarregavel",
-    "Radio HT",
-    "Ronda Eletronica FindMe",
-    "Detector de metal tipo bastao",
-    "Colete e capa",
-    "Computador completo (simples)",
-    "Guarita simples",
-    "Guarita com banheiro quimico"
-  ],
-  Seguranca: [
     "Acorda Vigia Alabella",
     "Arma calibre 38 e municao",
     "Arma Pistola 380 e municao",
@@ -788,6 +774,13 @@ function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeServiceLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.toLowerCase() === "seguranca") return "Vigilancia";
+  return text;
+}
+
 function normalizeProposalServiceLines(items = []) {
   return (Array.isArray(items) ? items : [])
     .map((item) => ({
@@ -1259,15 +1252,91 @@ async function ensureAppLookupOptionsTable() {
   `);
 }
 
+async function ensureCanonicalServiceLabels() {
+  await query(`
+    UPDATE request_services
+    SET service_type = 'vigilancia'
+    WHERE service_type = 'seguranca'
+  `);
+
+  await query(`
+    UPDATE request_posts
+    SET post_type = 'vigilancia'
+    WHERE post_type = 'seguranca'
+  `);
+
+  await query(`
+    UPDATE request_equipments
+    SET category = 'vigilancia'
+    WHERE category = 'seguranca'
+  `);
+
+  await query(`
+    DELETE FROM app_lookup_options
+    WHERE category = 'serviceTypes'
+      AND LOWER(value) = 'seguranca'
+      AND EXISTS (
+        SELECT 1
+        FROM app_lookup_options existing
+        WHERE existing.category = 'serviceTypes'
+          AND existing.id <> app_lookup_options.id
+          AND COALESCE(existing.group_key, '') = COALESCE(app_lookup_options.group_key, '')
+          AND existing.value = 'Vigilancia'
+      )
+  `);
+
+  await query(`
+    UPDATE app_lookup_options
+    SET value = 'Vigilancia'
+    WHERE category = 'serviceTypes'
+      AND LOWER(value) = 'seguranca'
+  `);
+
+  await query(`
+    DELETE FROM app_lookup_options
+    WHERE category = 'equipmentOptions'
+      AND LOWER(COALESCE(group_key, '')) = 'seguranca'
+      AND EXISTS (
+        SELECT 1
+        FROM app_lookup_options existing
+        WHERE existing.category = 'equipmentOptions'
+          AND existing.id <> app_lookup_options.id
+          AND COALESCE(existing.group_key, '') = 'Vigilancia'
+          AND existing.value = app_lookup_options.value
+      )
+  `);
+
+  await query(`
+    UPDATE app_lookup_options
+    SET group_key = 'Vigilancia'
+    WHERE category = 'equipmentOptions'
+      AND LOWER(COALESCE(group_key, '')) = 'seguranca'
+  `);
+
+  await query(`
+    DELETE FROM app_lookup_options first
+    USING app_lookup_options second
+    WHERE first.id < second.id
+      AND first.category = second.category
+      AND COALESCE(first.group_key, '') = COALESCE(second.group_key, '')
+      AND first.value = second.value
+  `);
+}
+
 async function ensureAppLookupCategoryValues(client, category, values = [], groupKey = null) {
   for (const [index, value] of values.entries()) {
-    const text = String(value || "").trim();
+    const text = category === "serviceTypes"
+      ? normalizeServiceLabel(value)
+      : String(value || "").trim();
     if (!text) continue;
+    const normalizedGroupKey = category === "equipmentOptions"
+      ? normalizeServiceLabel(groupKey)
+      : groupKey;
     await client.query(
       `INSERT INTO app_lookup_options (category, group_key, value, sort_order, is_active)
        VALUES ($1, $2, $3, $4, TRUE)
        ON CONFLICT DO NOTHING`,
-      [category, groupKey, text, (index + 1) * 10]
+      [category, normalizedGroupKey, text, (index + 1) * 10]
     );
   }
 }
@@ -1288,19 +1357,29 @@ function buildConfigLookups(rows = []) {
   rows.forEach((row) => {
     if (!row.isActive) return;
     if (row.category === "equipmentOptions") {
-      const serviceKey = String(row.groupKey || "").trim();
+      const serviceKey = normalizeServiceLabel(row.groupKey);
       if (!serviceKey) return;
       if (!bucket.equipmentOptionsByService[serviceKey]) {
         bucket.equipmentOptionsByService[serviceKey] = [];
       }
-      bucket.equipmentOptionsByService[serviceKey].push(row.value);
+      bucket.equipmentOptionsByService[serviceKey].push(String(row.value || "").trim());
       return;
     }
 
     if (!bucket[row.category]) {
       bucket[row.category] = [];
     }
-    bucket[row.category].push(row.value);
+    const nextValue = row.category === "serviceTypes"
+      ? normalizeServiceLabel(row.value)
+      : row.value;
+    bucket[row.category].push(nextValue);
+  });
+
+  bucket.serviceTypes = [...new Set(bucket.serviceTypes.filter(Boolean))];
+  Object.keys(bucket.equipmentOptionsByService).forEach((serviceKey) => {
+    bucket.equipmentOptionsByService[serviceKey] = [
+      ...new Set(bucket.equipmentOptionsByService[serviceKey].filter(Boolean))
+    ];
   });
 
   return bucket;
@@ -2066,9 +2145,11 @@ async function replaceRequestStructure(client, requestId, payload) {
   await client.query("DELETE FROM request_equipments WHERE request_id = $1", [requestId]);
 
   for (const serviceType of payload.serviceTypes || []) {
+    const normalizedServiceType = normalizeServiceLabel(serviceType);
+    if (!normalizedServiceType) continue;
     await client.query(
       "INSERT INTO request_services (request_id, service_type) VALUES ($1, $2)",
-      [requestId, slugify(serviceType)]
+      [requestId, slugify(normalizedServiceType)]
     );
   }
 
@@ -2088,6 +2169,7 @@ async function replaceRequestStructure(client, requestId, payload) {
   }
 
   for (const post of payload.posts || []) {
+    const normalizedPostType = normalizeServiceLabel(post.postType);
     await client.query(
       `INSERT INTO request_posts (
         request_id, post_type, qty_posts, qty_workers, function_name, work_scale,
@@ -2096,7 +2178,7 @@ async function replaceRequestStructure(client, requestId, payload) {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         requestId,
-        slugify(post.postType),
+        slugify(normalizedPostType),
         toNullableNumber(post.postQty),
         toNullableNumber(post.workerQty),
         post.functionName || null,
@@ -2113,13 +2195,14 @@ async function replaceRequestStructure(client, requestId, payload) {
   }
 
   for (const equipment of payload.equipments || []) {
+    const normalizedCategory = normalizeServiceLabel(equipment.category || "");
     await client.query(
       `INSERT INTO request_equipments (
         request_id, category, equipment_name, quantity, notes
       ) VALUES ($1, $2, $3, $4, $5)`,
       [
         requestId,
-        slugify(equipment.category || ""),
+        slugify(normalizedCategory),
         equipment.equipmentName,
         toNullableNumber(equipment.equipmentQty),
         equipment.equipmentNotes || null
@@ -5890,6 +5973,7 @@ ensurePasswordColumn()
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureWorkflowStageNames())
   .then(() => ensureAppLookupOptionsTable())
+  .then(() => ensureCanonicalServiceLabels())
   .then(() => ensureProposalRegistryColumns())
   .then(() => ensureUppercaseClientNames())
   .then(() => ensureCanonicalSellerNames())
