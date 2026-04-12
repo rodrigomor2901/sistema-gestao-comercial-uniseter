@@ -2598,10 +2598,10 @@ async function deleteRequest(requestId, session) {
       [requestId]
     );
 
-    await client.query("DELETE FROM attachments WHERE request_id = $1", [requestId]);
     await client.query("DELETE FROM contract_records WHERE request_id = $1", [requestId]);
     await client.query("DELETE FROM commercial_records WHERE request_id = $1", [requestId]);
     await client.query("DELETE FROM proposal_records WHERE request_id = $1", [requestId]);
+    await client.query("DELETE FROM attachments WHERE request_id = $1", [requestId]);
     await client.query("DELETE FROM request_pending_info WHERE request_id = $1", [requestId]);
     await client.query("DELETE FROM request_stage_history WHERE request_id = $1", [requestId]);
     await client.query("DELETE FROM request_equipments WHERE request_id = $1", [requestId]);
