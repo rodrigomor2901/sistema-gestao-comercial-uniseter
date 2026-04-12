@@ -212,6 +212,32 @@ const WORKFLOW_STAGE_OPTIONS = [
   "negociacao_de_clausulas",
   "contrato_assinado"
 ];
+const LOOKUP_CATEGORY_DEFINITIONS = [
+  { key: "branches", label: "Filiais", description: "Unidades e bases comerciais disponíveis nos formulários.", grouped: false, source: "app_lookup_options" },
+  { key: "responsibles", label: "Responsáveis", description: "Responsáveis sugeridos para preenchimento de negócio e proposta.", grouped: false, source: "app_lookup_options" },
+  { key: "leadSources", label: "Origem do lead", description: "Canais de origem da oportunidade comercial.", grouped: false, source: "app_lookup_options" },
+  { key: "proposalStatuses", label: "Status da proposta", description: "Situações disponíveis para o cadastro da proposta.", grouped: false, source: "app_lookup_options" },
+  { key: "documentTypes", label: "Tipos de documento", description: "Tipos usados na geração do número de proposta.", grouped: false, source: "app_lookup_options" },
+  { key: "industries", label: "Segmentos", description: "Segmentos de atuação do cliente.", grouped: false, source: "app_lookup_options" },
+  { key: "serviceTypes", label: "Tipos de serviço", description: "Serviços utilizados na requisição e na composição das operações.", grouped: false, source: "app_lookup_options" },
+  { key: "workScales", label: "Escalas", description: "Escalas operacionais disponíveis nos postos.", grouped: false, source: "app_lookup_options" },
+  { key: "equipmentOptions", label: "Equipamentos por serviço", description: "Equipamentos sugeridos para cada tipo de serviço.", grouped: true, source: "app_lookup_options" },
+  { key: "lossReasons", label: "Motivos de perda", description: "Motivos de perda utilizados na negociação.", grouped: false, source: "reason_table", tableName: "loss_reasons" },
+  { key: "cancelReasons", label: "Motivos de cancelamento", description: "Motivos de cancelamento utilizados no fluxo comercial.", grouped: false, source: "reason_table", tableName: "cancel_reasons" }
+];
+const LOOKUP_CATEGORY_MAP = Object.fromEntries(
+  LOOKUP_CATEGORY_DEFINITIONS.map((item) => [item.key, item])
+);
+const STATIC_LOOKUP_DEFAULTS = {
+  branches: BRANCH_OPTIONS,
+  responsibles: RESPONSIBLE_OPTIONS,
+  leadSources: LEAD_SOURCE_OPTIONS,
+  proposalStatuses: PROPOSAL_STATUS_OPTIONS,
+  documentTypes: DOCUMENT_TYPE_OPTIONS,
+  industries: INDUSTRY_OPTIONS,
+  serviceTypes: SERVICE_TYPE_OPTIONS,
+  workScales: WORK_SCALE_OPTIONS
+};
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -1208,6 +1234,121 @@ async function ensureNegotiationDiaryTable() {
   `);
 }
 
+async function ensureAppLookupOptionsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_lookup_options (
+      id BIGSERIAL PRIMARY KEY,
+      category VARCHAR(80) NOT NULL,
+      group_key VARCHAR(150),
+      value TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_app_lookup_options_category_group_value
+    ON app_lookup_options (category, COALESCE(group_key, ''), value)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_app_lookup_options_category_order
+    ON app_lookup_options (category, group_key, sort_order, value)
+  `);
+}
+
+async function ensureAppLookupCategoryValues(client, category, values = [], groupKey = null) {
+  for (const [index, value] of values.entries()) {
+    const text = String(value || "").trim();
+    if (!text) continue;
+    await client.query(
+      `INSERT INTO app_lookup_options (category, group_key, value, sort_order, is_active)
+       VALUES ($1, $2, $3, $4, TRUE)
+       ON CONFLICT DO NOTHING`,
+      [category, groupKey, text, (index + 1) * 10]
+    );
+  }
+}
+
+function buildConfigLookups(rows = []) {
+  const bucket = {
+    branches: [],
+    responsibles: [],
+    leadSources: [],
+    proposalStatuses: [],
+    documentTypes: [],
+    industries: [],
+    serviceTypes: [],
+    workScales: [],
+    equipmentOptionsByService: {}
+  };
+
+  rows.forEach((row) => {
+    if (!row.isActive) return;
+    if (row.category === "equipmentOptions") {
+      const serviceKey = String(row.groupKey || "").trim();
+      if (!serviceKey) return;
+      if (!bucket.equipmentOptionsByService[serviceKey]) {
+        bucket.equipmentOptionsByService[serviceKey] = [];
+      }
+      bucket.equipmentOptionsByService[serviceKey].push(row.value);
+      return;
+    }
+
+    if (!bucket[row.category]) {
+      bucket[row.category] = [];
+    }
+    bucket[row.category].push(row.value);
+  });
+
+  return bucket;
+}
+
+async function listAppLookupRows(includeInactive = false) {
+  const result = await query(
+    `SELECT
+       id,
+       category,
+       group_key AS "groupKey",
+       value,
+       sort_order AS "sortOrder",
+       is_active AS "isActive"
+     FROM app_lookup_options
+     ${includeInactive ? "" : "WHERE is_active = TRUE"}
+     ORDER BY category ASC, COALESCE(group_key, '') ASC, sort_order ASC, value ASC`
+  );
+
+  return result.rows;
+}
+
+function buildLookupConfigResponse(appLookupRows, reasonLookupMap) {
+  const itemsByCategory = {};
+
+  LOOKUP_CATEGORY_DEFINITIONS.forEach((category) => {
+    if (category.source === "app_lookup_options") {
+      itemsByCategory[category.key] = appLookupRows.filter((item) => item.category === category.key);
+      return;
+    }
+
+    itemsByCategory[category.key] = reasonLookupMap[category.key] || [];
+  });
+
+  const serviceGroups = new Set([
+    ...(itemsByCategory.serviceTypes || []).map((item) => item.value),
+    ...(itemsByCategory.equipmentOptions || []).map((item) => item.groupKey).filter(Boolean)
+  ]);
+
+  return {
+    categories: LOOKUP_CATEGORY_DEFINITIONS,
+    itemsByCategory,
+    groupOptions: {
+      equipmentOptions: [...serviceGroups].sort((left, right) => left.localeCompare(right, "pt-BR"))
+    }
+  };
+}
+
 function composeNegotiationDiaryNote(entry) {
   const parts = [];
   const summary = String(entry.summary || "").trim();
@@ -1458,11 +1599,18 @@ async function ensureBaseAccessData() {
 
     await ensureLookupValues(client, "loss_reasons", LOSS_REASON_OPTIONS);
     await ensureLookupValues(client, "cancel_reasons", CANCEL_REASON_OPTIONS);
+    for (const [category, values] of Object.entries(STATIC_LOOKUP_DEFAULTS)) {
+      await ensureAppLookupCategoryValues(client, category, values);
+    }
+    for (const [serviceName, equipmentItems] of Object.entries(EQUIPMENT_OPTIONS_BY_SERVICE)) {
+      await ensureAppLookupCategoryValues(client, "equipmentOptions", equipmentItems, serviceName);
+    }
   });
 }
 
 async function getLookups(session = null) {
-  const [lossReasons, cancelReasons, sellers, workflowStages] = await Promise.all([
+  const [appLookupRows, lossReasons, cancelReasons, sellers, workflowStages] = await Promise.all([
+    listAppLookupRows(false),
     query("SELECT id, name FROM loss_reasons WHERE is_active = TRUE ORDER BY name ASC"),
     query("SELECT id, name FROM cancel_reasons WHERE is_active = TRUE ORDER BY name ASC"),
     query(
@@ -1482,16 +1630,20 @@ async function getLookups(session = null) {
     )
   ]);
 
+  const configLookups = buildConfigLookups(appLookupRows);
+
   return {
-    branches: BRANCH_OPTIONS,
-    responsibles: RESPONSIBLE_OPTIONS,
-    leadSources: LEAD_SOURCE_OPTIONS,
-    proposalStatuses: PROPOSAL_STATUS_OPTIONS,
-    documentTypes: DOCUMENT_TYPE_OPTIONS,
-    industries: INDUSTRY_OPTIONS,
-    serviceTypes: SERVICE_TYPE_OPTIONS,
-    workScales: WORK_SCALE_OPTIONS,
-    equipmentOptionsByService: EQUIPMENT_OPTIONS_BY_SERVICE,
+    branches: configLookups.branches.length ? configLookups.branches : BRANCH_OPTIONS,
+    responsibles: configLookups.responsibles.length ? configLookups.responsibles : RESPONSIBLE_OPTIONS,
+    leadSources: configLookups.leadSources.length ? configLookups.leadSources : LEAD_SOURCE_OPTIONS,
+    proposalStatuses: configLookups.proposalStatuses.length ? configLookups.proposalStatuses : PROPOSAL_STATUS_OPTIONS,
+    documentTypes: configLookups.documentTypes.length ? configLookups.documentTypes : DOCUMENT_TYPE_OPTIONS,
+    industries: configLookups.industries.length ? configLookups.industries : INDUSTRY_OPTIONS,
+    serviceTypes: configLookups.serviceTypes.length ? configLookups.serviceTypes : SERVICE_TYPE_OPTIONS,
+    workScales: configLookups.workScales.length ? configLookups.workScales : WORK_SCALE_OPTIONS,
+    equipmentOptionsByService: Object.keys(configLookups.equipmentOptionsByService).length
+      ? configLookups.equipmentOptionsByService
+      : EQUIPMENT_OPTIONS_BY_SERVICE,
     lossReasons: lossReasons.rows,
     cancelReasons: cancelReasons.rows,
     sellers: sellers.rows,
@@ -1499,6 +1651,240 @@ async function getLookups(session = null) {
       ? workflowStages.rows.filter((stage) => hasStageAccess(session, stage.code))
       : workflowStages.rows
   };
+}
+
+function getLookupCategoryConfig(categoryKey) {
+  const category = LOOKUP_CATEGORY_MAP[categoryKey];
+  if (!category) {
+    throw new Error("Categoria de configuração não encontrada.");
+  }
+  return category;
+}
+
+async function listLookupConfigurations() {
+  const [appLookupRows, lossReasons, cancelReasons] = await Promise.all([
+    listAppLookupRows(true),
+    query(
+      `SELECT id, name AS value, NULL::text AS "groupKey", 0 AS "sortOrder", is_active AS "isActive"
+       FROM loss_reasons
+       ORDER BY is_active DESC, name ASC`
+    ),
+    query(
+      `SELECT id, name AS value, NULL::text AS "groupKey", 0 AS "sortOrder", is_active AS "isActive"
+       FROM cancel_reasons
+       ORDER BY is_active DESC, name ASC`
+    )
+  ]);
+
+  return buildLookupConfigResponse(appLookupRows, {
+    lossReasons: lossReasons.rows,
+    cancelReasons: cancelReasons.rows
+  });
+}
+
+async function getNextLookupSortOrder(client, categoryKey, groupKey = null) {
+  const category = getLookupCategoryConfig(categoryKey);
+  if (category.source === "reason_table") {
+    return 0;
+  }
+
+  const result = await client.query(
+    `SELECT COALESCE(MAX(sort_order), 0)::int + 10 AS next_order
+     FROM app_lookup_options
+     WHERE category = $1
+       AND COALESCE(group_key, '') = COALESCE($2, '')`,
+    [categoryKey, groupKey]
+  );
+
+  return result.rows[0]?.next_order || 10;
+}
+
+async function createLookupConfigurationItem(categoryKey, payload, session) {
+  const category = getLookupCategoryConfig(categoryKey);
+  const value = String(payload.value || "").trim();
+  const groupKey = String(payload.groupKey || "").trim() || null;
+  const isActive = payload.isActive !== false;
+  const rawSortOrder = String(payload.sortOrder ?? "").trim();
+
+  if (!value) {
+    throw new Error("Informe o valor do item.");
+  }
+  if (category.grouped && !groupKey) {
+    throw new Error("Informe o agrupamento do item.");
+  }
+
+  return withTransaction(async (client) => {
+    if (category.source === "reason_table") {
+      const result = await client.query(
+        `INSERT INTO ${category.tableName} (name, is_active)
+         VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE
+         SET is_active = EXCLUDED.is_active
+         RETURNING id, name AS value, NULL::text AS "groupKey", 0 AS "sortOrder", is_active AS "isActive"`,
+        [value, isActive]
+      );
+
+      await logAuditEntry(client, {
+        actor: session,
+        actionType: "lookup_config_create",
+        entityType: categoryKey,
+        entityId: result.rows[0]?.id || null,
+        description: `${category.label}: item '${value}' cadastrado.`,
+        metadata: { categoryKey, value, groupKey, isActive }
+      });
+      return result.rows[0];
+    }
+
+    const sortOrder = rawSortOrder !== "" && Number.isFinite(Number(rawSortOrder))
+      ? Number(rawSortOrder)
+      : await getNextLookupSortOrder(client, categoryKey, groupKey);
+    const existing = await client.query(
+      `SELECT id
+         FROM app_lookup_options
+        WHERE category = $1
+          AND COALESCE(group_key, '') = COALESCE($2, '')
+          AND value = $3
+        LIMIT 1`,
+      [categoryKey, groupKey, value]
+    );
+    const result = existing.rows[0]
+      ? await client.query(
+        `UPDATE app_lookup_options
+            SET sort_order = $2,
+                is_active = $3,
+                updated_at = NOW()
+          WHERE id = $1
+        RETURNING id, category, group_key AS "groupKey", value, sort_order AS "sortOrder", is_active AS "isActive"`,
+        [existing.rows[0].id, sortOrder, isActive]
+      )
+      : await client.query(
+        `INSERT INTO app_lookup_options (category, group_key, value, sort_order, is_active)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, category, group_key AS "groupKey", value, sort_order AS "sortOrder", is_active AS "isActive"`,
+        [categoryKey, groupKey, value, sortOrder, isActive]
+      );
+
+    await logAuditEntry(client, {
+      actor: session,
+      actionType: "lookup_config_create",
+      entityType: categoryKey,
+      entityId: result.rows[0]?.id || null,
+      description: `${category.label}: item '${value}' cadastrado.`,
+      metadata: { categoryKey, value, groupKey, sortOrder, isActive }
+    });
+    return result.rows[0];
+  });
+}
+
+async function updateLookupConfigurationItem(categoryKey, itemId, payload, session) {
+  const category = getLookupCategoryConfig(categoryKey);
+  const value = String(payload.value || "").trim();
+  const groupKey = String(payload.groupKey || "").trim() || null;
+  const isActive = payload.isActive !== false;
+  const rawSortOrder = String(payload.sortOrder ?? "").trim();
+
+  if (!value) {
+    throw new Error("Informe o valor do item.");
+  }
+  if (category.grouped && !groupKey) {
+    throw new Error("Informe o agrupamento do item.");
+  }
+
+  return withTransaction(async (client) => {
+    if (category.source === "reason_table") {
+      const result = await client.query(
+        `UPDATE ${category.tableName}
+            SET name = $2,
+                is_active = $3
+          WHERE id = $1
+        RETURNING id, name AS value, NULL::text AS "groupKey", 0 AS "sortOrder", is_active AS "isActive"`,
+        [itemId, value, isActive]
+      );
+      if (!result.rows[0]) {
+        throw new Error("Item não encontrado.");
+      }
+
+      await logAuditEntry(client, {
+        actor: session,
+        actionType: "lookup_config_update",
+        entityType: categoryKey,
+        entityId: itemId,
+        description: `${category.label}: item '${value}' atualizado.`,
+        metadata: { categoryKey, value, isActive }
+      });
+      return result.rows[0];
+    }
+
+    const sortOrder = rawSortOrder !== "" && Number.isFinite(Number(rawSortOrder))
+      ? Number(rawSortOrder)
+      : await getNextLookupSortOrder(client, categoryKey, groupKey);
+    const result = await client.query(
+      `UPDATE app_lookup_options
+          SET value = $2,
+              group_key = $3,
+              sort_order = $4,
+              is_active = $5,
+              updated_at = NOW()
+        WHERE id = $1
+          AND category = $6
+      RETURNING id, category, group_key AS "groupKey", value, sort_order AS "sortOrder", is_active AS "isActive"`,
+      [itemId, value, groupKey, sortOrder, isActive, categoryKey]
+    );
+    if (!result.rows[0]) {
+      throw new Error("Item não encontrado.");
+    }
+
+    await logAuditEntry(client, {
+      actor: session,
+      actionType: "lookup_config_update",
+      entityType: categoryKey,
+      entityId: itemId,
+      description: `${category.label}: item '${value}' atualizado.`,
+      metadata: { categoryKey, value, groupKey, sortOrder, isActive }
+    });
+    return result.rows[0];
+  });
+}
+
+async function deactivateLookupConfigurationItem(categoryKey, itemId, session) {
+  const category = getLookupCategoryConfig(categoryKey);
+  return withTransaction(async (client) => {
+    let result;
+    if (category.source === "reason_table") {
+      result = await client.query(
+        `UPDATE ${category.tableName}
+            SET is_active = FALSE
+          WHERE id = $1
+        RETURNING id, name AS value`,
+        [itemId]
+      );
+    } else {
+      result = await client.query(
+        `UPDATE app_lookup_options
+            SET is_active = FALSE,
+                updated_at = NOW()
+          WHERE id = $1
+            AND category = $2
+        RETURNING id, value`,
+        [itemId, categoryKey]
+      );
+    }
+
+    if (!result.rows[0]) {
+      throw new Error("Item não encontrado.");
+    }
+
+    await logAuditEntry(client, {
+      actor: session,
+      actionType: "lookup_config_deactivate",
+      entityType: categoryKey,
+      entityId: itemId,
+      description: `${category.label}: item '${result.rows[0].value}' retirado da lista.`,
+      metadata: { categoryKey }
+    });
+
+    return result.rows[0];
+  });
 }
 
 async function getReasonId(client, tableName, reasonName) {
@@ -5124,6 +5510,53 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/admin/lookups-config") {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const config = await listLookupConfigurations();
+      sendJson(response, 200, config);
+      return;
+    }
+
+    if (request.method === "POST" && /^\/api\/admin\/lookups-config\/[a-zA-Z0-9_]+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const categoryKey = url.pathname.split("/").pop();
+      const body = await readBody(request);
+      const payload = JSON.parse(body || "{}");
+      const item = await createLookupConfigurationItem(categoryKey, payload, session);
+      sendJson(response, 201, { message: "Item de configuração salvo com sucesso.", item });
+      return;
+    }
+
+    if (request.method === "PUT" && /^\/api\/admin\/lookups-config\/[a-zA-Z0-9_]+\/\d+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const pathParts = url.pathname.split("/");
+      const categoryKey = pathParts[pathParts.length - 2];
+      const itemId = Number(pathParts[pathParts.length - 1]);
+      const body = await readBody(request);
+      const payload = JSON.parse(body || "{}");
+      const item = await updateLookupConfigurationItem(categoryKey, itemId, payload, session);
+      sendJson(response, 200, { message: "Item de configuração atualizado com sucesso.", item });
+      return;
+    }
+
+    if (request.method === "DELETE" && /^\/api\/admin\/lookups-config\/[a-zA-Z0-9_]+\/\d+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const pathParts = url.pathname.split("/");
+      const categoryKey = pathParts[pathParts.length - 2];
+      const itemId = Number(pathParts[pathParts.length - 1]);
+      await deactivateLookupConfigurationItem(categoryKey, itemId, session);
+      sendJson(response, 200, { message: "Item retirado da lista com sucesso." });
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/admin/users") {
       assertAuthenticated(session);
       assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
@@ -5456,6 +5889,7 @@ ensurePasswordColumn()
   .then(() => ensureWorkflowStageAccessColumn())
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureWorkflowStageNames())
+  .then(() => ensureAppLookupOptionsTable())
   .then(() => ensureProposalRegistryColumns())
   .then(() => ensureUppercaseClientNames())
   .then(() => ensureCanonicalSellerNames())

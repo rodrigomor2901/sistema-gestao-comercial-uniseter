@@ -4,25 +4,54 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sistema de Gestão Comercial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <section id="login-screen" class="login-screen">
-    <div class="login-panel">
-      <img src="/unisetter-logo-white-transparent.png" alt="Grupo Uniseter" class="login-screen-logo" />
-      <div class="login-title">Gestão Comercial - Uniseter</div>
-      <form id="login-form" class="login-form">
-        <div class="control">
-          <label for="login-email">Email</label>
-          <input id="login-email" name="email" type="email" autocomplete="username" />
+    <div class="login-shell">
+      <div class="login-highlight">
+        <div class="login-badge">Identidade visual inspirada em proteção e inteligência operacional</div>
+        <h1>Uma operação comercial com presença, segurança e clareza.</h1>
+        <p>
+          A nova linguagem visual parte do azul profundo e dos detalhes dourados da referência enviada,
+          preservando a identidade original da Uniseter e trazendo mais sofisticação para login, navegação e gestão diária.
+        </p>
+        <div class="login-feature-list">
+          <div class="login-feature">
+            <strong>Fluxo comercial completo</strong>
+            <span>Solicitações, propostas, negociações e contratos em sequência contínua.</span>
+          </div>
+          <div class="login-feature">
+            <strong>Leitura rápida do pipeline</strong>
+            <span>Painéis, filas e cards com contraste melhor e foco no que precisa de ação.</span>
+          </div>
+          <div class="login-feature">
+            <strong>Administração mais simples</strong>
+            <span>Listas configuráveis centralizadas para ajustar campos sem depender de código.</span>
+          </div>
         </div>
-        <div class="control">
-          <label for="login-password">Senha</label>
-          <input id="login-password" name="password" type="password" autocomplete="current-password" />
-        </div>
-        <button type="submit" class="primary login-submit">Entrar</button>
-        <div id="login-feedback" class="muted"></div>
-      </form>
+      </div>
+
+      <div class="login-panel">
+        <img src="/unisetter-logo-white-transparent.png" alt="Grupo Uniseter" class="login-screen-logo" />
+        <div class="login-title">Gestão Comercial - Uniseter</div>
+        <div class="login-panel-copy">Acesse o ambiente para acompanhar o ciclo completo da proposta até o contrato assinado.</div>
+        <form id="login-form" class="login-form">
+          <div class="control">
+            <label for="login-email">Email</label>
+            <input id="login-email" name="email" type="email" autocomplete="username" />
+          </div>
+          <div class="control">
+            <label for="login-password">Senha</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" />
+          </div>
+          <button type="submit" class="primary login-submit">Entrar</button>
+          <div id="login-feedback" class="muted"></div>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -80,6 +109,7 @@
         <div class="nav-title">Módulo administrador</div>
         <nav class="nav module-nav">
           <a href="#" data-view-link="admin_users">Administrar usuários</a>
+          <a href="#" data-view-link="admin_config">Configurações</a>
           <a href="#" data-view-link="alterar_senha">Alterar senha</a>
         </nav>
       </div>
@@ -866,6 +896,88 @@
               </thead>
               <tbody id="admin-audit-table"></tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="card page-view" data-view="admin_config">
+        <div class="section-head">
+          <h2>Configurações de listas</h2>
+          <span>Gerencie valores usados nos campos de seleção do sistema</span>
+        </div>
+
+        <div class="admin-config-layout">
+          <div class="card admin-config-categories-card">
+            <div class="section-head">
+              <h2>Categorias</h2>
+              <span id="admin-lookup-category-summary">0 categoria(s)</span>
+            </div>
+            <div id="admin-lookup-categories" class="admin-lookup-categories"></div>
+          </div>
+
+          <div class="admin-config-main">
+            <div class="card">
+              <div class="section-head">
+                <h2 id="admin-lookup-title">Itens da lista</h2>
+                <span id="admin-lookup-description">Selecione uma categoria para administrar os itens.</span>
+              </div>
+              <div class="table-wrap compact-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Valor</th>
+                      <th>Agrupamento</th>
+                      <th>Ordem</th>
+                      <th>Status</th>
+                      <th>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-lookup-items-table"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="section-head">
+                <h2>Formulário do item</h2>
+                <span>Criar, editar ou retirar da lista</span>
+              </div>
+
+              <form id="admin-lookup-form" class="form-layout">
+                <input id="admin-lookup-item-id" type="hidden" />
+                <input id="admin-lookup-category-key" type="hidden" />
+                <div class="form-block compact-block">
+                  <div class="form-grid form-grid--wide admin-lookup-grid">
+                    <div class="control control-span-2">
+                      <label for="admin-lookup-value">Valor</label>
+                      <input id="admin-lookup-value" name="value" />
+                    </div>
+                    <div class="control control-span-2" id="admin-lookup-group-control" hidden>
+                      <label for="admin-lookup-group-key">Agrupamento</label>
+                      <input id="admin-lookup-group-key" name="groupKey" list="admin-lookup-group-options" placeholder="Ex.: Vigilancia" />
+                      <small class="field-hint">Para equipamentos por serviço, informe ou selecione o serviço relacionado.</small>
+                      <datalist id="admin-lookup-group-options"></datalist>
+                    </div>
+                    <div class="control">
+                      <label for="admin-lookup-sort-order">Ordem</label>
+                      <input id="admin-lookup-sort-order" name="sortOrder" type="number" step="1" min="0" placeholder="10" />
+                    </div>
+                    <div class="control">
+                      <label for="admin-lookup-active">Status</label>
+                      <select id="admin-lookup-active" name="isActive">
+                        <option value="true">Ativo</option>
+                        <option value="false">Inativo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="button-row compact-actions">
+                    <button type="submit" class="primary">Salvar item</button>
+                    <button type="button" class="secondary" id="admin-lookup-reset">Novo item</button>
+                    <button type="button" class="secondary" id="admin-lookup-deactivate">Retirar da lista</button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </section>

@@ -89,6 +89,12 @@ const VIEW_CONFIG = {
     subtitle: "Cadastro, alteração de acesso e controle de perfis.",
     showExport: false,
     showNewRequest: false
+  },
+  admin_config: {
+    title: "Configurações",
+    subtitle: "Gerencie listas e opções exibidas nos campos do sistema.",
+    showExport: false,
+    showNewRequest: false
   }
 };
 
@@ -208,7 +214,7 @@ const ROLE_CONFIG = {
   administrador: {
     label: "Administrador",
     note: "Acesso total ao sistema, incluindo futuras rotinas administrativas e gestao de usuarios.",
-    views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "propostas", "negociacoes", "contratos", "relatorios", "alterar_senha", "admin_users"],
+    views: ["dashboard", "funil_vendas", "proposta_todas", "proposta_crm", "solicitacoes", "propostas", "negociacoes", "contratos", "relatorios", "alterar_senha", "admin_users", "admin_config"],
     permissions: {
       createRequest: true,
       deleteRequest: true,
@@ -231,7 +237,8 @@ const VIEW_MODULE_MAP = {
   negociacoes: "vendas",
   contratos: "contratos",
   relatorios: "relatorios",
-  admin_users: "admin"
+  admin_users: "admin",
+  admin_config: "admin"
 };
 
 let currentView = "dashboard";
@@ -250,6 +257,12 @@ let forcePasswordChange = false;
 let adminUsersCache = [];
 let auditLogsCache = [];
 let availableRoles = [];
+let adminLookupConfigCache = {
+  categories: [],
+  itemsByCategory: {},
+  groupOptions: {}
+};
+let activeAdminLookupCategory = "";
 let negotiationFiltersState = {
   dateStart: "",
   dateEnd: "",
@@ -270,7 +283,9 @@ let lookupsCache = {
   workScales: [],
   equipmentOptionsByService: {},
   lossReasons: [],
-  cancelReasons: []
+  cancelReasons: [],
+  sellers: [],
+  workflowStages: []
 };
 const PROPOSAL_SERVICE_TYPES = [
   "Vigilancia",
@@ -1019,6 +1034,124 @@ function renderAuditLogs(items) {
   `).join("");
 }
 
+function getAdminLookupCategoryMeta(categoryKey = activeAdminLookupCategory) {
+  return adminLookupConfigCache.categories.find((item) => item.key === categoryKey) || null;
+}
+
+function renderAdminLookupCategories() {
+  const container = document.getElementById("admin-lookup-categories");
+  const summary = document.getElementById("admin-lookup-category-summary");
+  if (!container || !summary) return;
+
+  const categories = adminLookupConfigCache.categories || [];
+  summary.textContent = `${categories.length} categoria(s)`;
+
+  if (!categories.length) {
+    container.innerHTML = `<div class="empty-state">Nenhuma categoria configurada.</div>`;
+    return;
+  }
+
+  container.innerHTML = categories.map((category) => {
+    const items = adminLookupConfigCache.itemsByCategory?.[category.key] || [];
+    const activeCount = items.filter((item) => item.isActive).length;
+    return `
+      <button
+        type="button"
+        class="admin-lookup-category-button ${category.key === activeAdminLookupCategory ? "active" : ""}"
+        data-lookup-category="${category.key}"
+      >
+        <strong>${escapeHtml(category.label)}</strong>
+        <span>${activeCount} item(ns) ativo(s)</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function renderAdminLookupItems(categoryKey = activeAdminLookupCategory) {
+  const title = document.getElementById("admin-lookup-title");
+  const description = document.getElementById("admin-lookup-description");
+  const table = document.getElementById("admin-lookup-items-table");
+  if (!title || !description || !table) return;
+
+  const category = getAdminLookupCategoryMeta(categoryKey);
+  if (!category) {
+    title.textContent = "Itens da lista";
+    description.textContent = "Selecione uma categoria para administrar os itens.";
+    table.innerHTML = `<tr><td colspan="5" class="muted">Nenhuma categoria selecionada.</td></tr>`;
+    return;
+  }
+
+  title.textContent = category.label;
+  description.textContent = category.description || "Lista administrável pelo módulo de configurações.";
+
+  const items = adminLookupConfigCache.itemsByCategory?.[category.key] || [];
+  if (!items.length) {
+    table.innerHTML = `<tr><td colspan="5" class="muted">Nenhum item cadastrado nesta categoria.</td></tr>`;
+    return;
+  }
+
+  table.innerHTML = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.value)}</td>
+      <td>${escapeHtml(item.groupKey || "-")}</td>
+      <td>${item.sortOrder ?? "-"}</td>
+      <td>${item.isActive ? "Ativo" : "Inativo"}</td>
+      <td><button type="button" class="table-action admin-lookup-edit" data-lookup-id="${item.id}" data-lookup-category="${category.key}">Editar</button></td>
+    </tr>
+  `).join("");
+}
+
+function syncAdminLookupGroupOptions(categoryKey = activeAdminLookupCategory) {
+  const datalist = document.getElementById("admin-lookup-group-options");
+  if (!datalist) return;
+  const options = adminLookupConfigCache.groupOptions?.[categoryKey] || [];
+  datalist.innerHTML = options.map((item) => `<option value="${escapeHtml(item)}"></option>`).join("");
+}
+
+function syncAdminLookupGroupControl(categoryKey = activeAdminLookupCategory) {
+  const category = getAdminLookupCategoryMeta(categoryKey);
+  const wrapper = document.getElementById("admin-lookup-group-control");
+  const input = document.getElementById("admin-lookup-group-key");
+  if (!wrapper || !input) return;
+
+  const grouped = Boolean(category?.grouped);
+  wrapper.hidden = !grouped;
+  input.required = grouped;
+  if (!grouped) {
+    input.value = "";
+  }
+  syncAdminLookupGroupOptions(categoryKey);
+}
+
+function populateAdminLookupForm(item = null) {
+  const category = getAdminLookupCategoryMeta();
+  document.getElementById("admin-lookup-category-key").value = category?.key || "";
+  document.getElementById("admin-lookup-item-id").value = item?.id || "";
+  document.getElementById("admin-lookup-value").value = item?.value || "";
+  document.getElementById("admin-lookup-group-key").value = item?.groupKey || "";
+  document.getElementById("admin-lookup-sort-order").value = item?.sortOrder ?? "";
+  document.getElementById("admin-lookup-active").value = String(item?.isActive ?? true);
+  syncAdminLookupGroupControl(category?.key || "");
+}
+
+function resetAdminLookupForm() {
+  const form = document.getElementById("admin-lookup-form");
+  if (!form) return;
+  form.reset();
+  document.getElementById("admin-lookup-item-id").value = "";
+  document.getElementById("admin-lookup-category-key").value = activeAdminLookupCategory || "";
+  document.getElementById("admin-lookup-active").value = "true";
+  syncAdminLookupGroupControl(activeAdminLookupCategory);
+}
+
+function setActiveAdminLookupCategory(categoryKey) {
+  if (!categoryKey) return;
+  activeAdminLookupCategory = categoryKey;
+  renderAdminLookupCategories();
+  renderAdminLookupItems(categoryKey);
+  resetAdminLookupForm();
+}
+
 function populateRoleSelect(roles) {
   const roleSelect = document.getElementById("admin-user-role");
   roleSelect.innerHTML = roles.map((role) => `
@@ -1078,6 +1211,7 @@ function applyLookups(lookups) {
   populateSimpleSelect("proposal-number-lead-source", lookups.leadSources || []);
   populateDataList("responsible-options", lookups.responsibles || []);
   renderServiceTypeChips(lookups.serviceTypes || []);
+  syncAdminLookupGroupOptions("equipmentOptions");
 }
 
 function resetAdminUserForm() {
@@ -2572,17 +2706,28 @@ function exportSalesFunnel() {
 
 async function loadAdminModule() {
   if (!rolePermissions(currentRole).manageUsers) return;
-  const [users, roles, auditLogs] = await Promise.all([
+  const [users, roles, auditLogs, lookupConfig] = await Promise.all([
     loadJson("/api/admin/users"),
     loadJson("/api/admin/roles"),
-    loadJson("/api/admin/audit-logs")
+    loadJson("/api/admin/audit-logs"),
+    loadJson("/api/admin/lookups-config")
   ]);
   adminUsersCache = users;
   auditLogsCache = auditLogs;
   availableRoles = roles;
+  adminLookupConfigCache = lookupConfig;
   populateRoleSelect(roles);
   renderAdminUsers(users);
   renderAuditLogs(auditLogs);
+  const availableCategory = getAdminLookupCategoryMeta(activeAdminLookupCategory)
+    ? activeAdminLookupCategory
+    : lookupConfig.categories?.[0]?.key;
+  if (availableCategory) {
+    setActiveAdminLookupCategory(availableCategory);
+  } else {
+    renderAdminLookupCategories();
+    renderAdminLookupItems("");
+  }
 }
 
 async function loadAuthenticatedAppData() {
@@ -2637,6 +2782,11 @@ async function loadAuthenticatedAppData() {
   await loadAdminModule();
   setActiveView("dashboard");
   showAppShell();
+}
+
+async function reloadApplicationLookups() {
+  const lookups = await loadJson("/api/lookups");
+  applyLookups(lookups);
 }
 
 async function selectRequest(requestId) {
@@ -3215,6 +3365,55 @@ async function bootstrap() {
     }
   });
 
+  document.getElementById("admin-lookup-categories").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-lookup-category]");
+    if (!button) return;
+    setActiveAdminLookupCategory(button.dataset.lookupCategory);
+  });
+
+  document.getElementById("admin-lookup-items-table").addEventListener("click", (event) => {
+    const button = event.target.closest(".admin-lookup-edit");
+    if (!button) return;
+    const categoryKey = button.dataset.lookupCategory;
+    if (categoryKey !== activeAdminLookupCategory) {
+      setActiveAdminLookupCategory(categoryKey);
+    }
+    const items = adminLookupConfigCache.itemsByCategory?.[categoryKey] || [];
+    const item = items.find((entry) => String(entry.id) === String(button.dataset.lookupId));
+    if (item) {
+      populateAdminLookupForm(item);
+    }
+  });
+
+  document.getElementById("admin-lookup-reset").addEventListener("click", () => {
+    resetAdminLookupForm();
+  });
+
+  document.getElementById("admin-lookup-deactivate").addEventListener("click", async () => {
+    const itemId = document.getElementById("admin-lookup-item-id").value;
+    const categoryKey = document.getElementById("admin-lookup-category-key").value || activeAdminLookupCategory;
+    if (!itemId || !categoryKey) {
+      alert("Selecione um item para retirar da lista.");
+      return;
+    }
+
+    try {
+      const response = await fetchWithSession(`/api/admin/lookups-config/${categoryKey}/${itemId}`, {
+        method: "DELETE"
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Falha ao retirar item da lista.");
+      }
+
+      await Promise.all([loadAdminModule(), reloadApplicationLookups()]);
+      resetAdminLookupForm();
+      alert(result.message || "Item retirado da lista com sucesso.");
+    } catch (error) {
+      alert(`Não foi possível retirar o item da lista: ${error.message}`);
+    }
+  });
+
   document.getElementById("admin-user-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const userId = document.getElementById("admin-user-id").value;
@@ -3260,6 +3459,52 @@ async function bootstrap() {
       alert(successMessage);
     } catch (error) {
       alert(`Não foi possível salvar o usuário: ${error.message}`);
+    }
+  });
+
+  document.getElementById("admin-lookup-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const categoryKey = document.getElementById("admin-lookup-category-key").value || activeAdminLookupCategory;
+    const itemId = document.getElementById("admin-lookup-item-id").value;
+    const payload = {
+      value: document.getElementById("admin-lookup-value").value.trim(),
+      groupKey: document.getElementById("admin-lookup-group-key").value.trim(),
+      sortOrder: document.getElementById("admin-lookup-sort-order").value.trim(),
+      isActive: document.getElementById("admin-lookup-active").value === "true"
+    };
+    const category = getAdminLookupCategoryMeta(categoryKey);
+
+    if (!categoryKey || !payload.value) {
+      alert("Selecione uma categoria e informe o valor do item.");
+      return;
+    }
+
+    if (category?.grouped && !payload.groupKey) {
+      alert("Informe o agrupamento deste item.");
+      return;
+    }
+
+    try {
+      const response = await fetchWithSession(
+        itemId
+          ? `/api/admin/lookups-config/${categoryKey}/${itemId}`
+          : `/api/admin/lookups-config/${categoryKey}`,
+        {
+          method: itemId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Falha ao salvar item da lista.");
+      }
+
+      await Promise.all([loadAdminModule(), reloadApplicationLookups()]);
+      resetAdminLookupForm();
+      alert(result.message || "Item salvo com sucesso.");
+    } catch (error) {
+      alert(`Não foi possível salvar o item da lista: ${error.message}`);
     }
   });
 }
