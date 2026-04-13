@@ -779,10 +779,17 @@ function dedupeByKey(items = [], createKey) {
   return unique;
 }
 
-function dedupeRequestStructurePayload(payload = {}) {
-  const serviceTypes = [...new Set((payload.serviceTypes || []).map((item) => normalizeServiceLabel(item)).filter(Boolean))];
-  const transportOptions = [...new Set((payload.transportOptions || []).map((item) => String(item || "").trim()).filter(Boolean))];
-  const posts = dedupeByKey(payload.posts || [], (item) => [
+function hasStructureValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function mergeStructureValue(currentValue, nextValue) {
+  if (hasStructureValue(currentValue)) return currentValue;
+  return nextValue;
+}
+
+function buildPostStructureCoreKey(item = {}) {
+  return [
     normalizedStructureKey(normalizeServiceLabel(item.postType)),
     normalizedStructureKey(item.postQty),
     normalizedStructureKey(item.workerQty),
@@ -792,13 +799,32 @@ function dedupeRequestStructurePayload(payload = {}) {
     normalizedStructureKey(item.endTime),
     normalizedStructureKey(item.saturdayStartTime ?? item.saturdayTime),
     normalizedStructureKey(item.saturdayEndTime),
-    normalizedStructureKey(item.holidayFlag),
-    normalizedStructureKey(item.additionalType),
-    normalizedStructureKey(item.gratificationPercentage),
-    normalizedStructureKey(item.indemnifiedFlag),
-    normalizedStructureKey(item.uniformText),
-    normalizedStructureKey(item.costAllowance)
-  ].join("|"));
+    normalizedStructureKey(item.holidayFlag)
+  ].join("|");
+}
+
+function dedupeRequestStructurePayload(payload = {}) {
+  const serviceTypes = [...new Set((payload.serviceTypes || []).map((item) => normalizeServiceLabel(item)).filter(Boolean))];
+  const transportOptions = [...new Set((payload.transportOptions || []).map((item) => String(item || "").trim()).filter(Boolean))];
+  const postMap = new Map();
+  for (const item of payload.posts || []) {
+    const key = buildPostStructureCoreKey(item);
+    if (!key) continue;
+    const current = postMap.get(key);
+    if (!current) {
+      postMap.set(key, { ...item });
+      continue;
+    }
+    postMap.set(key, {
+      ...current,
+      additionalType: mergeStructureValue(current.additionalType, item.additionalType),
+      gratificationPercentage: mergeStructureValue(current.gratificationPercentage, item.gratificationPercentage),
+      indemnifiedFlag: mergeStructureValue(current.indemnifiedFlag, item.indemnifiedFlag),
+      uniformText: mergeStructureValue(current.uniformText, item.uniformText),
+      costAllowance: mergeStructureValue(current.costAllowance, item.costAllowance)
+    });
+  }
+  const posts = [...postMap.values()];
   const equipments = dedupeByKey(payload.equipments || [], (item) => [
     normalizedStructureKey(normalizeServiceLabel(item.category || "")),
     normalizedStructureKey(item.equipmentName),
@@ -1258,6 +1284,43 @@ async function ensureRequestStructureDeduplication() {
       AND current_row.indemnified_flag IS NOT DISTINCT FROM duplicate_row.indemnified_flag
       AND current_row.uniform_text IS NOT DISTINCT FROM duplicate_row.uniform_text
       AND current_row.cost_allowance_value IS NOT DISTINCT FROM duplicate_row.cost_allowance_value
+  `);
+
+  await query(`
+    WITH ranked_posts AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY
+            request_id,
+            post_type,
+            qty_posts,
+            qty_workers,
+            function_name,
+            work_scale,
+            start_time,
+            end_time,
+            saturday_time,
+            saturday_end_time,
+            holiday_flag
+          ORDER BY
+            (
+              CASE WHEN additional_type IS NOT NULL AND additional_type <> '' THEN 1 ELSE 0 END +
+              CASE WHEN gratification_percentage IS NOT NULL THEN 1 ELSE 0 END +
+              CASE WHEN indemnified_flag IS NOT NULL THEN 1 ELSE 0 END +
+              CASE WHEN uniform_text IS NOT NULL AND uniform_text <> '' THEN 1 ELSE 0 END +
+              CASE WHEN cost_allowance_value IS NOT NULL THEN 1 ELSE 0 END
+            ) DESC,
+            id ASC
+        ) AS row_rank
+      FROM request_posts
+    )
+    DELETE FROM request_posts
+    WHERE id IN (
+      SELECT id
+      FROM ranked_posts
+      WHERE row_rank > 1
+    )
   `);
 
   await query(`

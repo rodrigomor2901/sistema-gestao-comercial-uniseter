@@ -1843,8 +1843,17 @@ function dedupeItems(items = [], createKey) {
   return unique;
 }
 
-function dedupePostRows(items = []) {
-  return dedupeItems(items, (item) => [
+function isFilledValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function mergeOptionalValue(currentValue, nextValue) {
+  if (isFilledValue(currentValue)) return currentValue;
+  return nextValue;
+}
+
+function buildPostCoreKey(item) {
+  return [
     normalizedFieldKey(item.postType),
     normalizedFieldKey(item.postQty),
     normalizedFieldKey(item.workerQty),
@@ -1854,13 +1863,30 @@ function dedupePostRows(items = []) {
     normalizedFieldKey(item.endTime),
     normalizedFieldKey(item.saturdayStartTime ?? item.saturdayTime),
     normalizedFieldKey(item.saturdayEndTime),
-    normalizedFieldKey(item.holidayFlag),
-    normalizedFieldKey(item.additionalType),
-    normalizedFieldKey(item.gratificationPercentage),
-    normalizedFieldKey(item.indemnifiedFlag),
-    normalizedFieldKey(item.uniformText),
-    normalizedFieldKey(item.costAllowance)
-  ].join("|"));
+    normalizedFieldKey(item.holidayFlag)
+  ].join("|");
+}
+
+function dedupePostRows(items = []) {
+  const merged = new Map();
+  items.forEach((item) => {
+    const key = buildPostCoreKey(item);
+    if (!key) return;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...item });
+      return;
+    }
+    merged.set(key, {
+      ...current,
+      additionalType: mergeOptionalValue(current.additionalType, item.additionalType),
+      gratificationPercentage: mergeOptionalValue(current.gratificationPercentage, item.gratificationPercentage),
+      indemnifiedFlag: mergeOptionalValue(current.indemnifiedFlag, item.indemnifiedFlag),
+      uniformText: mergeOptionalValue(current.uniformText, item.uniformText),
+      costAllowance: mergeOptionalValue(current.costAllowance, item.costAllowance)
+    });
+  });
+  return [...merged.values()];
 }
 
 function dedupeEquipmentRows(items = []) {
