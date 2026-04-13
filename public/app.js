@@ -1823,6 +1823,55 @@ function getSelectedServiceTypes() {
   )];
 }
 
+function normalizedFieldKey(value) {
+  return String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function dedupeItems(items = [], createKey) {
+  const seen = new Set();
+  const unique = [];
+  items.forEach((item) => {
+    const key = createKey(item);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    unique.push(item);
+  });
+  return unique;
+}
+
+function dedupePostRows(items = []) {
+  return dedupeItems(items, (item) => [
+    normalizedFieldKey(item.postType),
+    normalizedFieldKey(item.postQty),
+    normalizedFieldKey(item.workerQty),
+    normalizedFieldKey(item.functionName),
+    normalizedFieldKey(item.workScale),
+    normalizedFieldKey(item.startTime),
+    normalizedFieldKey(item.endTime),
+    normalizedFieldKey(item.saturdayStartTime ?? item.saturdayTime),
+    normalizedFieldKey(item.saturdayEndTime),
+    normalizedFieldKey(item.holidayFlag),
+    normalizedFieldKey(item.additionalType),
+    normalizedFieldKey(item.gratificationPercentage),
+    normalizedFieldKey(item.indemnifiedFlag),
+    normalizedFieldKey(item.uniformText),
+    normalizedFieldKey(item.costAllowance)
+  ].join("|"));
+}
+
+function dedupeEquipmentRows(items = []) {
+  return dedupeItems(items, (item) => [
+    normalizedFieldKey(item.category),
+    normalizedFieldKey(item.equipmentName),
+    normalizedFieldKey(item.equipmentQty ?? item.quantity),
+    normalizedFieldKey(item.equipmentNotes ?? item.notes)
+  ].join("|"));
+}
+
 function collectPostRowsFromDom() {
   return [...document.querySelectorAll(".post-row")].map((row) => ({
     postType: normalizeServiceLabel(row.dataset.service || ""),
@@ -2261,8 +2310,8 @@ async function buildRequestPayload() {
   const form = document.getElementById("request-form");
   const data = new FormData(form);
   const serviceTypes = getSelectedServiceTypes();
-  const posts = collectPostRowsFromDom();
-  const equipments = collectEquipmentRowsFromDom();
+  const posts = dedupePostRows(collectPostRowsFromDom());
+  const equipments = dedupeEquipmentRows(collectEquipmentRowsFromDom());
 
   return {
     requestId: data.get("requestId"),
@@ -2294,9 +2343,9 @@ async function buildRequestPayload() {
     secondaryContactRole: data.get("secondaryContactRole"),
     secondaryContactEmail: data.get("secondaryContactEmail"),
     secondaryContactPhone: data.get("secondaryContactPhone"),
-    serviceTypes,
+    serviceTypes: [...new Set(serviceTypes)],
     transportRegion: data.get("transportRegion"),
-    transportOptions: [...document.querySelectorAll('input[name="transportOption"]:checked')].map((item) => item.value),
+    transportOptions: [...new Set([...document.querySelectorAll('input[name="transportOption"]:checked')].map((item) => item.value))],
     transportNotes: data.get("transportNotes"),
     medicalNotes: data.get("medicalNotes"),
     mealNotes: data.get("mealNotes"),

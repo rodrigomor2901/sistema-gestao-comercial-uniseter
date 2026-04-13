@@ -759,6 +759,62 @@ function slugify(text) {
     .replace(/^_+|_+$/g, "");
 }
 
+function normalizedStructureKey(value) {
+  return String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function dedupeByKey(items = [], createKey) {
+  const seen = new Set();
+  const unique = [];
+  for (const item of items || []) {
+    const key = createKey(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+  return unique;
+}
+
+function dedupeRequestStructurePayload(payload = {}) {
+  const serviceTypes = [...new Set((payload.serviceTypes || []).map((item) => normalizeServiceLabel(item)).filter(Boolean))];
+  const transportOptions = [...new Set((payload.transportOptions || []).map((item) => String(item || "").trim()).filter(Boolean))];
+  const posts = dedupeByKey(payload.posts || [], (item) => [
+    normalizedStructureKey(normalizeServiceLabel(item.postType)),
+    normalizedStructureKey(item.postQty),
+    normalizedStructureKey(item.workerQty),
+    normalizedStructureKey(item.functionName),
+    normalizedStructureKey(item.workScale),
+    normalizedStructureKey(item.startTime),
+    normalizedStructureKey(item.endTime),
+    normalizedStructureKey(item.saturdayStartTime ?? item.saturdayTime),
+    normalizedStructureKey(item.saturdayEndTime),
+    normalizedStructureKey(item.holidayFlag),
+    normalizedStructureKey(item.additionalType),
+    normalizedStructureKey(item.gratificationPercentage),
+    normalizedStructureKey(item.indemnifiedFlag),
+    normalizedStructureKey(item.uniformText),
+    normalizedStructureKey(item.costAllowance)
+  ].join("|"));
+  const equipments = dedupeByKey(payload.equipments || [], (item) => [
+    normalizedStructureKey(normalizeServiceLabel(item.category || "")),
+    normalizedStructureKey(item.equipmentName),
+    normalizedStructureKey(item.equipmentQty ?? item.quantity),
+    normalizedStructureKey(item.equipmentNotes ?? item.notes)
+  ].join("|"));
+
+  return {
+    ...payload,
+    serviceTypes,
+    transportOptions,
+    posts,
+    equipments
+  };
+}
+
 function escapeCsv(value) {
   const text = String(value ?? "");
   if (/[",;\n]/.test(text)) {
@@ -1159,6 +1215,60 @@ async function ensureCanonicalSellerNames() {
     END
     WHERE manager_name IS NOT NULL
       AND UPPER(manager_name) IN ('ANDRE', 'LANA')
+  `);
+}
+
+async function ensureRequestStructureDeduplication() {
+  await query(`
+    DELETE FROM request_services current_row
+    USING request_services duplicate_row
+    WHERE current_row.id > duplicate_row.id
+      AND current_row.request_id = duplicate_row.request_id
+      AND current_row.service_type IS NOT DISTINCT FROM duplicate_row.service_type
+  `);
+
+  await query(`
+    DELETE FROM request_benefits current_row
+    USING request_benefits duplicate_row
+    WHERE current_row.id > duplicate_row.id
+      AND current_row.request_id = duplicate_row.request_id
+      AND current_row.benefit_type IS NOT DISTINCT FROM duplicate_row.benefit_type
+      AND current_row.option_label IS NOT DISTINCT FROM duplicate_row.option_label
+      AND current_row.region_value IS NOT DISTINCT FROM duplicate_row.region_value
+      AND current_row.notes IS NOT DISTINCT FROM duplicate_row.notes
+  `);
+
+  await query(`
+    DELETE FROM request_posts current_row
+    USING request_posts duplicate_row
+    WHERE current_row.id > duplicate_row.id
+      AND current_row.request_id = duplicate_row.request_id
+      AND current_row.post_type IS NOT DISTINCT FROM duplicate_row.post_type
+      AND current_row.qty_posts IS NOT DISTINCT FROM duplicate_row.qty_posts
+      AND current_row.qty_workers IS NOT DISTINCT FROM duplicate_row.qty_workers
+      AND current_row.function_name IS NOT DISTINCT FROM duplicate_row.function_name
+      AND current_row.work_scale IS NOT DISTINCT FROM duplicate_row.work_scale
+      AND current_row.start_time IS NOT DISTINCT FROM duplicate_row.start_time
+      AND current_row.end_time IS NOT DISTINCT FROM duplicate_row.end_time
+      AND current_row.saturday_time IS NOT DISTINCT FROM duplicate_row.saturday_time
+      AND current_row.saturday_end_time IS NOT DISTINCT FROM duplicate_row.saturday_end_time
+      AND current_row.holiday_flag IS NOT DISTINCT FROM duplicate_row.holiday_flag
+      AND current_row.additional_type IS NOT DISTINCT FROM duplicate_row.additional_type
+      AND current_row.gratification_percentage IS NOT DISTINCT FROM duplicate_row.gratification_percentage
+      AND current_row.indemnified_flag IS NOT DISTINCT FROM duplicate_row.indemnified_flag
+      AND current_row.uniform_text IS NOT DISTINCT FROM duplicate_row.uniform_text
+      AND current_row.cost_allowance_value IS NOT DISTINCT FROM duplicate_row.cost_allowance_value
+  `);
+
+  await query(`
+    DELETE FROM request_equipments current_row
+    USING request_equipments duplicate_row
+    WHERE current_row.id > duplicate_row.id
+      AND current_row.request_id = duplicate_row.request_id
+      AND current_row.category IS NOT DISTINCT FROM duplicate_row.category
+      AND current_row.equipment_name IS NOT DISTINCT FROM duplicate_row.equipment_name
+      AND current_row.quantity IS NOT DISTINCT FROM duplicate_row.quantity
+      AND current_row.notes IS NOT DISTINCT FROM duplicate_row.notes
   `);
 }
 
@@ -2181,12 +2291,13 @@ async function replaceClientContacts(client, clientId, payload) {
 }
 
 async function replaceRequestStructure(client, requestId, payload) {
+  const normalizedPayload = dedupeRequestStructurePayload(payload);
   await client.query("DELETE FROM request_services WHERE request_id = $1", [requestId]);
   await client.query("DELETE FROM request_benefits WHERE request_id = $1", [requestId]);
   await client.query("DELETE FROM request_posts WHERE request_id = $1", [requestId]);
   await client.query("DELETE FROM request_equipments WHERE request_id = $1", [requestId]);
 
-  for (const serviceType of payload.serviceTypes || []) {
+  for (const serviceType of normalizedPayload.serviceTypes || []) {
     const normalizedServiceType = normalizeServiceLabel(serviceType);
     if (!normalizedServiceType) continue;
     await client.query(
@@ -2195,7 +2306,12 @@ async function replaceRequestStructure(client, requestId, payload) {
     );
   }
 
-  for (const benefit of mapBenefits(payload)) {
+  for (const benefit of dedupeByKey(mapBenefits(normalizedPayload), (item) => [
+    normalizedStructureKey(item.benefitType),
+    normalizedStructureKey(item.optionLabel),
+    normalizedStructureKey(item.regionValue),
+    normalizedStructureKey(item.notes)
+  ].join("|"))) {
     await client.query(
       `INSERT INTO request_benefits (
         request_id, benefit_type, option_label, region_value, notes
@@ -2210,7 +2326,7 @@ async function replaceRequestStructure(client, requestId, payload) {
     );
   }
 
-  for (const post of payload.posts || []) {
+  for (const post of normalizedPayload.posts || []) {
     const normalizedPostType = normalizeServiceLabel(post.postType);
     await client.query(
       `INSERT INTO request_posts (
@@ -2239,7 +2355,7 @@ async function replaceRequestStructure(client, requestId, payload) {
     );
   }
 
-  for (const equipment of payload.equipments || []) {
+  for (const equipment of normalizedPayload.equipments || []) {
     const normalizedCategory = normalizeServiceLabel(equipment.category || "");
     await client.query(
       `INSERT INTO request_equipments (
@@ -2257,6 +2373,7 @@ async function replaceRequestStructure(client, requestId, payload) {
 }
 
 async function createRequest(payload, session) {
+  payload = dedupeRequestStructurePayload(payload);
   const missing = validateRequestPayload(payload);
   if (missing.length) {
     throw new Error(`Campos obrigatorios nao preenchidos: ${missing.join(", ")}`);
@@ -2400,6 +2517,7 @@ async function createRequest(payload, session) {
 }
 
 async function updateRequest(payload, requestId, session) {
+  payload = dedupeRequestStructurePayload(payload);
   const missing = validateRequestPayload(payload);
   if (missing.length) {
     throw new Error(`Campos obrigatorios nao preenchidos: ${missing.join(", ")}`);
@@ -6052,6 +6170,7 @@ ensurePasswordColumn()
   .then(() => ensureCommercialRecordColumns())
   .then(() => ensureRequestPendingResponseColumns())
   .then(() => ensureRequestPostColumns())
+  .then(() => ensureRequestStructureDeduplication())
   .then(() => ensureAuditLogTable())
   .then(() => ensureNegotiationDiaryTable())
   .then(() => ensureBaseAccessData())
