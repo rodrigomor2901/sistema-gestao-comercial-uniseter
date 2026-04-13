@@ -1630,6 +1630,8 @@ function buildServiceOperationSummary(posts = [], equipments = []) {
   return services.map((serviceName) => {
     const servicePosts = posts.filter((item) => normalizeServiceLabel(item.postType || item.category || "") === serviceName);
     const serviceEquipments = equipments.filter((item) => normalizeServiceLabel(item.category || item.postType || "") === serviceName);
+    const showAdditional = serviceUsesAdditional(serviceName);
+    const showIndemnified = serviceUsesIndemnified(serviceName);
     const postLines = servicePosts.length
       ? servicePosts.map((item) => [
         `Postos: ${formatSummaryValue(item.qtyPosts ?? item.postQty)}`,
@@ -1641,12 +1643,12 @@ function buildServiceOperationSummary(posts = [], equipments = []) {
         `Sabado entrada: ${formatSummaryValue(item.saturdayStartTime ?? item.saturdayTime)}`,
         `Sabado saida: ${formatSummaryValue(item.saturdayEndTime)}`,
         `Feriado: ${formatSummaryValue(item.holidayFlag)}`,
-        `Adicional: ${formatSummaryValue(item.additionalType)}`,
+        showAdditional ? `Adicional: ${formatSummaryValue(item.additionalType)}` : null,
         `Gratificacao %: ${formatSummaryValue(item.gratificationPercentage)}`,
-        `Indenizado: ${formatSummaryValue(item.indemnifiedFlag)}`,
+        showIndemnified ? `Indenizado: ${formatSummaryValue(item.indemnifiedFlag)}` : null,
         `Uniforme: ${formatSummaryValue(item.uniformText)}`,
         `Ajuda de custo: ${formatSummaryValue(item.costAllowanceValue ?? item.costAllowance)}`
-      ].join(" | "))
+      ].filter(Boolean).join(" | "))
       : ["Nenhum posto informado."];
     const equipmentLines = serviceEquipments.length
       ? serviceEquipments.map((item) => [
@@ -1722,6 +1724,9 @@ function workflowViewFromStage(stageCode, fallbackView = "solicitacoes") {
 function preferredWorkflowView(detail, fallbackView = "solicitacoes") {
   if (detail?.stageCode === "aguardando_informacoes") {
     return "solicitacoes";
+  }
+  if (detail?.stageCode === "em_preparacao_da_proposta" && !detail?.proposalRegistryId && !detail?.proposalNumber) {
+    return "proposta_crm";
   }
   return workflowViewFromStage(detail?.stageCode, fallbackView);
 }
@@ -1859,6 +1864,16 @@ function getEquipmentOptionsForService(serviceName) {
   return lookupsCache.equipmentOptionsByService?.[normalizeServiceLabel(serviceName)] || [];
 }
 
+function serviceUsesAdditional(serviceName) {
+  const normalized = slugifyKey(normalizeServiceLabel(serviceName));
+  return ["limpeza", "jardinagem", "manutencao", "zeladora"].includes(normalized);
+}
+
+function serviceUsesIndemnified(serviceName) {
+  const normalized = slugifyKey(normalizeServiceLabel(serviceName));
+  return normalized !== "limpeza";
+}
+
 function buildWorkScaleOptions(selectedValue = "") {
   const selected = String(selectedValue || "");
   const options = ['<option value=""></option>'];
@@ -1874,6 +1889,8 @@ function buildWorkScaleOptions(selectedValue = "") {
 function buildPostRowMarkup(serviceName, item = {}) {
   const holidayValue = item.holidayFlag === true ? "Sim" : item.holidayFlag === false ? "Nao" : String(item.holidayFlag || "");
   const additionalValue = String(item.additionalType || "");
+  const showAdditional = serviceUsesAdditional(serviceName);
+  const showIndemnified = serviceUsesIndemnified(serviceName);
   return `
     <tr class="post-row" data-service="${escapeHtml(serviceName)}">
       <td>${escapeHtml(serviceName)}</td>
@@ -1886,9 +1903,15 @@ function buildPostRowMarkup(serviceName, item = {}) {
       <td><input name="saturdayStartTime[]" type="time" value="${escapeHtml(item.saturdayStartTime ?? item.saturdayTime ?? "")}" /></td>
       <td><input name="saturdayEndTime[]" type="time" value="${escapeHtml(item.saturdayEndTime || "")}" /></td>
       <td><select name="holidayFlag[]"><option value=""></option><option value="Sim" ${holidayValue === "Sim" ? "selected" : ""}>Sim</option><option value="Nao" ${holidayValue === "Nao" ? "selected" : ""}>Nao</option><option value="Reveza" ${holidayValue === "Reveza" ? "selected" : ""}>Reveza</option></select></td>
-      <td><select name="additionalType[]"><option value=""></option><option value="Sem Acréscimo" ${additionalValue === "Sem Acréscimo" ? "selected" : ""}>Sem Acréscimo</option><option value="Insalubridade 10%" ${additionalValue === "Insalubridade 10%" ? "selected" : ""}>Insalubridade 10%</option><option value="Insalubridade 20%" ${additionalValue === "Insalubridade 20%" ? "selected" : ""}>Insalubridade 20%</option><option value="Insalubridade 40%" ${additionalValue === "Insalubridade 40%" ? "selected" : ""}>Insalubridade 40%</option><option value="Periculosidade" ${additionalValue === "Periculosidade" ? "selected" : ""}>Periculosidade</option></select></td>
+      <td>${showAdditional
+        ? `<select name="additionalType[]"><option value=""></option><option value="Sem Acréscimo" ${additionalValue === "Sem Acréscimo" ? "selected" : ""}>Sem Acréscimo</option><option value="Insalubridade 10%" ${additionalValue === "Insalubridade 10%" ? "selected" : ""}>Insalubridade 10%</option><option value="Insalubridade 20%" ${additionalValue === "Insalubridade 20%" ? "selected" : ""}>Insalubridade 20%</option><option value="Insalubridade 40%" ${additionalValue === "Insalubridade 40%" ? "selected" : ""}>Insalubridade 40%</option><option value="Periculosidade" ${additionalValue === "Periculosidade" ? "selected" : ""}>Periculosidade</option></select>`
+        : `<input type="hidden" name="additionalType[]" value="" /><span class="muted inline-na">Nao se aplica</span>`}
+      </td>
       <td><input name="gratificationPercentage[]" type="number" min="0" step="0.01" placeholder="%" value="${escapeHtml(item.gratificationPercentage || "")}" /></td>
-      <td><select name="indemnifiedFlag[]"><option value=""></option><option ${item.indemnifiedFlag === "Sim" ? "selected" : ""}>Sim</option><option ${item.indemnifiedFlag === "Nao" ? "selected" : ""}>Nao</option></select></td>
+      <td>${showIndemnified
+        ? `<select name="indemnifiedFlag[]"><option value=""></option><option ${item.indemnifiedFlag === "Sim" ? "selected" : ""}>Sim</option><option ${item.indemnifiedFlag === "Nao" ? "selected" : ""}>Nao</option></select>`
+        : `<input type="hidden" name="indemnifiedFlag[]" value="" /><span class="muted inline-na">Nao se aplica</span>`}
+      </td>
       <td><select name="uniformText[]"><option value=""></option><option ${item.uniformText === "Padrao" ? "selected" : ""}>Padrao</option><option ${item.uniformText === "Social" ? "selected" : ""}>Social</option></select></td>
       <td><input name="costAllowance[]" type="number" min="0" step="0.01" value="${escapeHtml(item.costAllowanceValue ?? item.costAllowance ?? "")}" /></td>
       <td><button type="button" class="table-action delete-post-row">Excluir</button></td>
@@ -1936,20 +1959,20 @@ function renderServiceOperationGroups(posts = [], equipments = []) {
             <thead>
               <tr>
                 <th>Serviço</th>
-                <th>Qtd Postos</th>
-                <th>Qtd Func.</th>
+                <th>Qtd<br>postos</th>
+                <th>Qtd<br>func.</th>
                 <th>Funcao</th>
                 <th>Escala</th>
                 <th>Entrada</th>
                 <th>Saida</th>
-                <th>Sabado entrada</th>
-                <th>Sabado saida</th>
+                <th>Sabado<br>entrada</th>
+                <th>Sabado<br>saida</th>
                 <th>Feriado</th>
                 <th>Adicional</th>
-                <th>Gratificação %</th>
+                <th>Gratificação<br>%</th>
                 <th>Indenizado</th>
                 <th>Uniforme</th>
-                <th>Ajuda de custos</th>
+                <th>Ajuda de<br>custos</th>
                 <th>Acao</th>
               </tr>
             </thead>
@@ -2040,6 +2063,13 @@ function resetRequestForm() {
 }
 
 function populateRequestForm(detail) {
+  const form = document.getElementById("request-form");
+  form.reset();
+  document.getElementById("request-form-preview").textContent = "";
+  setCheckedValues("serviceType", []);
+  setCheckedValues("transportOption", []);
+  renderServiceOperationGroups([], []);
+  renderPendingRequestBlock(null);
   document.getElementById("request-id").value = detail.id || "";
   document.getElementById("request-submission-key").value = detail.id ? "" : generateRequestSubmissionKey();
   document.getElementById("request-date").value = detail.requestDateIso || "";
@@ -2420,6 +2450,7 @@ function resetNegotiationFilters() {
 
 function scrollToWorkflowForm(moduleKey) {
   const targets = {
+    proposta_crm: "proposal-number-form-section",
     solicitacoes: "request-form-section",
     propostas: "proposal-form-section",
     negociacoes: "commercial-form-section",
@@ -3117,10 +3148,14 @@ async function bootstrap() {
         populateProposalNumberLinkedRequest(null);
         setActiveView(canOpenProposalQueue ? "propostas" : "solicitacoes");
       } else if (detailId) {
-        await selectRequest(detailId);
+        const detail = await selectRequest(detailId);
         if (!isEditing) {
-          setActiveView(canOpenProposalQueue ? "propostas" : "solicitacoes");
-          scrollToWorkflowForm(canOpenProposalQueue ? "propostas" : "solicitacoes");
+          const targetView = preferredWorkflowView(
+            detail,
+            canOpenProposalQueue ? "propostas" : "solicitacoes"
+          );
+          setActiveView(targetView);
+          scrollToWorkflowForm(targetView);
         }
       }
 
@@ -3157,17 +3192,23 @@ async function bootstrap() {
         throw new Error(result.error || "Falha ao salvar triagem.");
       }
 
-      const detail = await loadJson(`/api/requests/${payload.requestId}`);
+      let refreshedDetail = payload.requestId ? await loadJson(`/api/requests/${payload.requestId}`) : null;
       if (payload.requestId) {
-        await selectRequest(payload.requestId);
+        refreshedDetail = await selectRequest(payload.requestId);
       } else if (payload.proposalRegistryId) {
         const detail = await loadProposalNumberDetail(payload.proposalRegistryId);
         populateCommercialForm(detail);
       }
       await refreshRequestsTable();
       await refreshDashboard();
+      await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
+      if (refreshedDetail) {
+        const targetView = preferredWorkflowView(refreshedDetail, "propostas");
+        setActiveView(targetView);
+        scrollToWorkflowForm(targetView);
+      }
       alert(result.message || "Triagem salva com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar a triagem: ${error.message}`);
