@@ -1179,6 +1179,36 @@ async function ensureRequestPendingResponseColumns() {
   `);
 }
 
+async function ensureRequestPostColumns() {
+  await query(`
+    ALTER TABLE request_posts
+    ADD COLUMN IF NOT EXISTS saturday_end_time VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS additional_type VARCHAR(60),
+    ADD COLUMN IF NOT EXISTS gratification_percentage NUMERIC(8,2)
+  `);
+
+  await query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'request_posts'
+          AND column_name = 'holiday_flag'
+          AND data_type = 'boolean'
+      ) THEN
+        ALTER TABLE request_posts
+        ALTER COLUMN holiday_flag TYPE VARCHAR(20)
+        USING CASE
+          WHEN holiday_flag IS TRUE THEN 'Sim'
+          WHEN holiday_flag IS FALSE THEN 'Nao'
+          ELSE NULL
+        END;
+      END IF;
+    END $$;
+  `);
+}
+
 async function ensureAuditLogTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -2185,9 +2215,9 @@ async function replaceRequestStructure(client, requestId, payload) {
     await client.query(
       `INSERT INTO request_posts (
         request_id, post_type, qty_posts, qty_workers, function_name, work_scale,
-        start_time, end_time, saturday_time, holiday_flag, indemnified_flag,
-        uniform_text, cost_allowance_value
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        start_time, end_time, saturday_time, saturday_end_time, holiday_flag, additional_type,
+        gratification_percentage, indemnified_flag, uniform_text, cost_allowance_value
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [
         requestId,
         slugify(normalizedPostType),
@@ -2197,8 +2227,11 @@ async function replaceRequestStructure(client, requestId, payload) {
         post.workScale || null,
         post.startTime || null,
         post.endTime || null,
-        post.saturdayTime || null,
-        post.holidayFlag === "" ? null : post.holidayFlag === "Sim",
+        post.saturdayStartTime || post.saturdayTime || null,
+        post.saturdayEndTime || null,
+        post.holidayFlag || null,
+        post.additionalType || null,
+        toNullableNumber(post.gratificationPercentage),
         post.indemnifiedFlag === "" ? null : post.indemnifiedFlag === "Sim",
         post.uniformText || null,
         toNullableNumber(post.costAllowance)
@@ -4063,7 +4096,10 @@ async function getRequestDetailFromDb(requestId, session) {
        start_time AS "startTime",
        end_time AS "endTime",
        saturday_time AS "saturdayTime",
+       saturday_end_time AS "saturdayEndTime",
        holiday_flag AS "holidayFlag",
+       additional_type AS "additionalType",
+       gratification_percentage AS "gratificationPercentage",
        indemnified_flag AS "indemnifiedFlag",
        uniform_text AS "uniformText",
        cost_allowance_value AS "costAllowanceValue"
@@ -6015,6 +6051,7 @@ ensurePasswordColumn()
   .then(() => ensureNegotiationProposalBranches())
   .then(() => ensureCommercialRecordColumns())
   .then(() => ensureRequestPendingResponseColumns())
+  .then(() => ensureRequestPostColumns())
   .then(() => ensureAuditLogTable())
   .then(() => ensureNegotiationDiaryTable())
   .then(() => ensureBaseAccessData())

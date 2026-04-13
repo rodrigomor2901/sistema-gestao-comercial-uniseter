@@ -1621,7 +1621,10 @@ function formatSummaryValue(value) {
 }
 
 function buildServiceOperationSummary(posts = [], equipments = []) {
-  const services = getOperationServices(posts, equipments);
+  const services = [...new Set([
+    ...posts.map((item) => normalizeServiceLabel(item.postType || item.category || "")),
+    ...equipments.map((item) => normalizeServiceLabel(item.category || item.postType || ""))
+  ].filter(Boolean))];
   if (!services.length) return ["Nenhum serviço informado."];
 
   return services.map((serviceName) => {
@@ -1635,8 +1638,11 @@ function buildServiceOperationSummary(posts = [], equipments = []) {
         `Escala: ${formatSummaryValue(item.workScale)}`,
         `Entrada: ${formatSummaryValue(item.startTime)}`,
         `Saida: ${formatSummaryValue(item.endTime)}`,
-        `Sabado entrada: ${formatSummaryValue(item.saturdayTime)}`,
+        `Sabado entrada: ${formatSummaryValue(item.saturdayStartTime ?? item.saturdayTime)}`,
+        `Sabado saida: ${formatSummaryValue(item.saturdayEndTime)}`,
         `Feriado: ${formatSummaryValue(item.holidayFlag)}`,
+        `Adicional: ${formatSummaryValue(item.additionalType)}`,
+        `Gratificacao %: ${formatSummaryValue(item.gratificationPercentage)}`,
         `Indenizado: ${formatSummaryValue(item.indemnifiedFlag)}`,
         `Uniforme: ${formatSummaryValue(item.uniformText)}`,
         `Ajuda de custo: ${formatSummaryValue(item.costAllowanceValue ?? item.costAllowance)}`
@@ -1821,8 +1827,11 @@ function collectPostRowsFromDom() {
     workScale: row.querySelector('[name="workScale[]"]')?.value || "",
     startTime: row.querySelector('[name="startTime[]"]')?.value || "",
     endTime: row.querySelector('[name="endTime[]"]')?.value || "",
-    saturdayTime: row.querySelector('[name="saturdayTime[]"]')?.value || "",
+    saturdayStartTime: row.querySelector('[name="saturdayStartTime[]"]')?.value || "",
+    saturdayEndTime: row.querySelector('[name="saturdayEndTime[]"]')?.value || "",
     holidayFlag: row.querySelector('[name="holidayFlag[]"]')?.value || "",
+    additionalType: row.querySelector('[name="additionalType[]"]')?.value || "",
+    gratificationPercentage: row.querySelector('[name="gratificationPercentage[]"]')?.value || "",
     indemnifiedFlag: row.querySelector('[name="indemnifiedFlag[]"]')?.value || "",
     uniformText: row.querySelector('[name="uniformText[]"]')?.value || "",
     costAllowance: row.querySelector('[name="costAllowance[]"]')?.value || ""
@@ -1863,6 +1872,8 @@ function buildWorkScaleOptions(selectedValue = "") {
 }
 
 function buildPostRowMarkup(serviceName, item = {}) {
+  const holidayValue = item.holidayFlag === true ? "Sim" : item.holidayFlag === false ? "Nao" : String(item.holidayFlag || "");
+  const additionalValue = String(item.additionalType || "");
   return `
     <tr class="post-row" data-service="${escapeHtml(serviceName)}">
       <td>${escapeHtml(serviceName)}</td>
@@ -1872,8 +1883,11 @@ function buildPostRowMarkup(serviceName, item = {}) {
       <td><select name="workScale[]">${buildWorkScaleOptions(item.workScale || "")}</select></td>
       <td><input name="startTime[]" type="time" value="${escapeHtml(item.startTime || "")}" /></td>
       <td><input name="endTime[]" type="time" value="${escapeHtml(item.endTime || "")}" /></td>
-      <td><input name="saturdayTime[]" type="time" value="${escapeHtml(item.saturdayTime || "")}" /></td>
-      <td><select name="holidayFlag[]"><option value=""></option><option ${item.holidayFlag === "Sim" ? "selected" : ""}>Sim</option><option ${item.holidayFlag === "Nao" ? "selected" : ""}>Nao</option></select></td>
+      <td><input name="saturdayStartTime[]" type="time" value="${escapeHtml(item.saturdayStartTime ?? item.saturdayTime ?? "")}" /></td>
+      <td><input name="saturdayEndTime[]" type="time" value="${escapeHtml(item.saturdayEndTime || "")}" /></td>
+      <td><select name="holidayFlag[]"><option value=""></option><option value="Sim" ${holidayValue === "Sim" ? "selected" : ""}>Sim</option><option value="Nao" ${holidayValue === "Nao" ? "selected" : ""}>Nao</option><option value="Reveza" ${holidayValue === "Reveza" ? "selected" : ""}>Reveza</option></select></td>
+      <td><select name="additionalType[]"><option value=""></option><option value="Sem Acréscimo" ${additionalValue === "Sem Acréscimo" ? "selected" : ""}>Sem Acréscimo</option><option value="Insalubridade 10%" ${additionalValue === "Insalubridade 10%" ? "selected" : ""}>Insalubridade 10%</option><option value="Insalubridade 20%" ${additionalValue === "Insalubridade 20%" ? "selected" : ""}>Insalubridade 20%</option><option value="Insalubridade 40%" ${additionalValue === "Insalubridade 40%" ? "selected" : ""}>Insalubridade 40%</option><option value="Periculosidade" ${additionalValue === "Periculosidade" ? "selected" : ""}>Periculosidade</option></select></td>
+      <td><input name="gratificationPercentage[]" type="number" min="0" step="0.01" placeholder="%" value="${escapeHtml(item.gratificationPercentage || "")}" /></td>
       <td><select name="indemnifiedFlag[]"><option value=""></option><option ${item.indemnifiedFlag === "Sim" ? "selected" : ""}>Sim</option><option ${item.indemnifiedFlag === "Nao" ? "selected" : ""}>Nao</option></select></td>
       <td><select name="uniformText[]"><option value=""></option><option ${item.uniformText === "Padrao" ? "selected" : ""}>Padrao</option><option ${item.uniformText === "Social" ? "selected" : ""}>Social</option></select></td>
       <td><input name="costAllowance[]" type="number" min="0" step="0.01" value="${escapeHtml(item.costAllowanceValue ?? item.costAllowance ?? "")}" /></td>
@@ -1929,7 +1943,10 @@ function renderServiceOperationGroups(posts = [], equipments = []) {
                 <th>Entrada</th>
                 <th>Saida</th>
                 <th>Sabado entrada</th>
+                <th>Sabado saida</th>
                 <th>Feriado</th>
+                <th>Adicional</th>
+                <th>Gratificação %</th>
                 <th>Indenizado</th>
                 <th>Uniforme</th>
                 <th>Ajuda de custos</th>

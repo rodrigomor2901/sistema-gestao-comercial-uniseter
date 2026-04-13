@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual de Treinamento Ilustrado - Sistema de Gestão Comercial Uniseter</title>
+  <style>
+    :root {
+      --navy: #082848;
+      --navy-soft: #123b62;
+      --gold: #f39200;
+      --sand: #f6f1e8;
+      --paper: #fffdf9;
+      --ink: #1f2937;
+      --muted: #667085;
+      --line: #dfd4c5;
+      --success: #0f766e;
+      --success-soft: #ddf3ef;
+      --shadow: 0 18px 44px rgba(8, 40, 72, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(243, 146, 0, 0.10), transparent 22%),
+        radial-gradient(circle at top right, rgba(8, 40, 72, 0.08), transparent 24%),
+        linear-gradient(180deg, #fbf8f3 0%, var(--sand) 100%);
+      line-height: 1.55;
+    }
+
+    .cover {
+      padding: 56px 24px 40px;
+      background:
+        linear-gradient(135deg, rgba(8, 40, 72, 0.96), rgba(18, 59, 98, 0.92)),
+        var(--navy);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover::before,
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: auto;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(243, 146, 0, 0.22), transparent 68%);
+      filter: blur(8px);
+    }
+
+    .cover::before {
+      top: -60px;
+      right: -40px;
+    }
+
+    .cover::after {
+      bottom: -100px;
+      left: -70px;
+    }
+
+    .cover-inner,
+    .page {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 26px;
+    }
+
+    .brand-row img {
+      width: 170px;
+      max-width: 42vw;
+      height: auto;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 16px 0 12px;
+      font-size: clamp(34px, 5vw, 54px);
+      line-height: 1.05;
+    }
+
+    .cover p {
+      max-width: 780px;
+      margin: 0;
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 17px;
+    }
+
+    .meta-grid {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .meta-card {
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.10);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      backdrop-filter: blur(5px);
+    }
+
+    .meta-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .page {
+      padding: 32px 0 56px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 24px;
+      margin-top: -28px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .toc {
+      padding: 24px;
+      position: sticky;
+      top: 20px;
+      align-self: start;
+    }
+
+    .toc h2,
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: 26px;
+      color: var(--navy);
+    }
+
+    .toc ol {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .toc li {
+      margin: 0 0 10px;
+    }
+
+    .toc a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .intro {
+      padding: 28px;
+    }
+
+    .intro-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .pill-box {
+      padding: 18px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, #fff, #faf6ef);
+      border: 1px solid var(--line);
+    }
+
+    .pill-box h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      color: var(--navy-soft);
+    }
+
+    .section {
+      margin-top: 24px;
+      padding: 28px;
+    }
+
+    .section h3 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+      color: var(--navy-soft);
+    }
+
+    .section ul,
+    .section ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .section li {
+      margin-bottom: 8px;
+    }
+
+    .highlight {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: var(--success-soft);
+      border: 1px solid rgba(15, 118, 110, 0.18);
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    figure {
+      margin: 0;
+      padding: 14px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    figure img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 14px;
+      border: 1px solid #ece3d7;
+    }
+
+    figcaption {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 16px;
+    }
+
+    .note {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-left: 4px solid var(--gold);
+      background: #fff8ee;
+      border-radius: 0 16px 16px 0;
+    }
+
+    .footer-note {
+      margin-top: 28px;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: #eef5fb;
+      border: 1px solid #d1e2f1;
+      color: #24435f;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .cover,
+      .card {
+        box-shadow: none;
+      }
+
+      .toc {
+        position: static;
+      }
+    }
+
+    @media (max-width: 920px) {
+      .summary,
+      .intro-grid,
+      .meta-grid,
+      .gallery,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .toc {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="cover">
+    <div class="cover-inner">
+      <div class="brand-row">
+        <img src="./../public/unisetter-logo-white-transparent.png" alt="Logo Uniseter">
+      </div>
+      <span class="eyebrow">Manual de treinamento interno</span>
+      <h1>Sistema de Gestão Comercial Uniseter</h1>
+      <p>Material ilustrado para treinamento dos perfis de vendas, comercial interno, propostas, jurídico e administração, cobrindo o fluxo completo desde a solicitação até o contrato assinado.</p>
+      <div class="meta-grid">
+        <div class="meta-card">
+          <strong>Versão</strong>
+          1.1 ilustrada
+        </div>
+        <div class="meta-card">
+          <strong>Data base</strong>
+          12/04/2026
+        </div>
+        <div class="meta-card">
+          <strong>Status</strong>
+          Em consolidação visual
+        </div>
+        <div class="meta-card">
+          <strong>Uso</strong>
+          Treinamento e consulta operacional
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="summary">
+      <aside class="toc card">
+        <h2>Conteúdo</h2>
+        <ol>
+          <li><a href="#visao-geral">Visão geral e perfis</a></li>
+          <li><a href="#fluxo">Fluxo completo</a></li>
+          <li><a href="#solicitacoes">Solicitações</a></li>
+          <li><a href="#propostas">Propostas</a></li>
+          <li><a href="#negociacoes">Negociações</a></li>
+          <li><a href="#contratos">Contratos</a></li>
+          <li><a href="#gestao">Dashboard, funil e administração</a></li>
+          <li><a href="#glossario-campos">Glossário por módulo</a></li>
+          <li><a href="#regras">Regras críticas e boas práticas</a></li>
+        </ol>
+      </aside>
+
+      <section class="intro card" id="visao-geral">
+        <h2>Visão geral e perfis</h2>
+        <p>O sistema organiza o processo comercial em uma trilha única, com rastreabilidade por etapa, controle por perfil e histórico centralizado. A operação foi estruturada para refletir a realidade da equipe Uniseter, com separação entre vendedor, apoio interno, propostas, jurídico e administrador.</p>
+
+        <div class="intro-grid">
+          <div class="pill-box">
+            <h3>Perfis principais</h3>
+            <ul>
+              <li>Vendedor: abre solicitações, negocia e acompanha os próprios negócios.</li>
+              <li>Comercial interno: faz triagem e devoluções para ajuste.</li>
+              <li>Propostas: elabora, gera número e finaliza a proposta.</li>
+              <li>Jurídico: conduz contrato, cláusulas e assinatura.</li>
+              <li>Administrador: controla usuários, permissões e listas.</li>
+            </ul>
+          </div>
+          <div class="pill-box">
+            <h3>Regras estruturais</h3>
+            <ul>
+              <li>O número da proposta é obrigatório antes da finalização.</li>
+              <li>O PDF final deve estar anexado antes do envio ao vendedor.</li>
+              <li>Vendedores enxergam apenas os próprios negócios, inclusive no dashboard e no funil.</li>
+              <li>O diário de negociação deve ser atualizado com contexto útil e data.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="gallery">
+          <figure>
+            <img src="./imagens-manual/02-sistema-chrome.png" alt="Dashboard do sistema">
+            <figcaption>Visão inicial do dashboard operacional.</figcaption>
+          </figure>
+          <figure>
+            <img src="./imagens-manual/14-funil-topo.png" alt="Funil de vendas">
+            <figcaption>Funil executivo com indicadores de pipeline e probabilidade.</figcaption>
+          </figure>
+        </div>
+      </section>
+    </div>
+
+    <section class="section card" id="fluxo">
+      <h2>Fluxo completo</h2>
+      <ol>
+        <li>Solicitação aberta pelo vendedor.</li>
+        <li>Triagem interna e devolução, se houver pendência.</li>
+        <li>Em Elaboração da Proposta.</li>
+        <li>Geração do número da proposta.</li>
+        <li>Proposta finalizada com PDF.</li>
+        <li>Recebimento de Proposta pelo vendedor.</li>
+        <li>Negociação com atualização de probabilidade e resumo.</li>
+        <li>Proposta Ganha.</li>
+        <li>Elaboração de contrato.</li>
+        <li>Negociação de cláusulas.</li>
+        <li>Contrato assinado.</li>
+      </ol>
+
+      <div class="highlight">
+        O ponto mais sensível do fluxo é a passagem entre elaboração, geração do número e finalização da proposta. Esse encadeamento precisa permanecer íntegro para evitar envio sem formalização ou sem anexo final.
+      </div>
+    </section>
+
+    <section class="section card" id="solicitacoes">
+      <h2>Solicitações</h2>
+      <p>Esse módulo recebe o pedido inicial do vendedor e organiza os dados do cliente, os serviços, os postos e os equipamentos por serviço. Ao salvar corretamente, a solicitação deve entrar em <strong>Em triagem</strong>.</p>
+
+      <div class="two-col">
+        <div>
+          <h3>Sequência recomendada</h3>
+          <ol>
+            <li>Dados da solicitação.</li>
+            <li>Dados do cliente.</li>
+            <li>Contatos.</li>
+            <li>Tipos de serviço.</li>
+            <li>Benefícios.</li>
+            <li>Postos por serviço.</li>
+            <li>Equipamentos por serviço.</li>
+            <li>Observações gerais e resumo.</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Pontos de atenção</h3>
+          <ul>
+            <li><strong>Segurança</strong> e <strong>Vigilância</strong> representam a mesma linha operacional.</li>
+            <li>No sábado, a operação considera apenas horário de entrada.</li>
+            <li>O e-mail financeiro foi ajustado para <strong>e-mail de faturamento</strong>.</li>
+            <li>O preenchimento por serviço melhora leitura e orçamento.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="gallery">
+        <figure>
+          <img src="./imagens-manual/06-modulo-solicitacoes.png" alt="Módulo de solicitações">
+          <figcaption>Tela principal de abertura e acompanhamento da solicitação.</figcaption>
+        </figure>
+        <figure>
+          <img src="./imagens-manual/11-scroll-admin.png" alt="Postos e equipamentos por serviço">
+          <figcaption>Bloco operacional com postos e equipamentos organizados por serviço.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section card" id="propostas">
+      <h2>Propostas</h2>
+      <p>O módulo de propostas centraliza triagem, devolução para correção, elaboração, geração do número e finalização da proposta. Ele é a ponte entre a solicitação estruturada e o material formal que será enviado ao vendedor.</p>
+
+      <div class="two-col">
+        <div>
+          <h3>Etapas cobertas</h3>
+          <ul>
+            <li>Em triagem</li>
+            <li>Aguardando informações</li>
+            <li>Em Elaboração da Proposta</li>
+            <li>Geração do número da proposta</li>
+            <li>Proposta finalizada</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Checklist interno</h3>
+          <ul>
+            <li>Definir responsável pela triagem.</li>
+            <li>Selecionar corretamente o campo <strong>Mover para etapa</strong>.</li>
+            <li>Gerar o número da proposta antes da finalização.</li>
+            <li>Anexar o PDF final antes do envio ao vendedor.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="gallery">
+        <figure>
+          <img src="./imagens-manual/08-modulo-propostas.png" alt="Módulo de propostas">
+          <figcaption>Fila operacional de propostas e triagem interna.</figcaption>
+        </figure>
+        <figure>
+          <img src="./imagens-manual/09-modulo-dashboard-foco.png" alt="Geração do número da proposta">
+          <figcaption>Tela usada para geração do número oficial da proposta.</figcaption>
+        </figure>
+        <figure>
+          <img src="./imagens-manual/37-propostas-mover-etapa-2.png" alt="Triagem com mover para etapa">
+          <figcaption>Detalhe da triagem com <strong>Mover para etapa</strong>, preparação interna e campo de PDF da proposta.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section card" id="negociacoes">
+      <h2>Negociações</h2>
+      <p>Depois do envio ao vendedor, o sistema passa a registrar o comportamento comercial do negócio. Aqui entram a confirmação de recebimento, a probabilidade de fechamento, o resumo das tratativas e o avanço até <strong>Proposta Ganha</strong>.</p>
+
+      <div class="two-col">
+        <div>
+          <h3>Campos principais</h3>
+          <ul>
+            <li>Status da negociação</li>
+            <li>Último contato</li>
+            <li>Próxima ação</li>
+            <li>Fechamento previsto</li>
+            <li>Probabilidade</li>
+            <li>Motivo da probabilidade</li>
+            <li>Resumo da negociação</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Boas práticas</h3>
+          <ul>
+            <li>Registrar o que foi discutido com o cliente.</li>
+            <li>Indicar a próxima ação comercial.</li>
+            <li>Atualizar a probabilidade sempre que o cenário mudar.</li>
+            <li>Usar o resumo como diário de negociação por data.</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure style="margin-top:18px;">
+        <img src="./imagens-manual/05-modulo-negociacoes.png" alt="Módulo de negociações">
+        <figcaption>Tela principal da fase comercial após o recebimento da proposta.</figcaption>
+      </figure>
+
+      <figure style="margin-top:18px;">
+        <img src="./imagens-manual/42-negociacoes-open.png" alt="Probabilidade e resumo da negociação">
+        <figcaption>Detalhe do bloco comercial com <strong>Resumo da interação do dia</strong>, <strong>Probabilidade</strong> e <strong>Motivo da probabilidade</strong>.</figcaption>
+      </figure>
+    </section>
+
+    <section class="section card" id="contratos">
+      <h2>Contratos</h2>
+      <p>Esse módulo formaliza o fechamento comercial. O jurídico acompanha o início da elaboração, a negociação de cláusulas, a documentação pendente e o encerramento com o contrato assinado.</p>
+
+      <div class="two-col">
+        <div>
+          <h3>Etapas contratuais</h3>
+          <ul>
+            <li>Elaboração de contrato</li>
+            <li>Negociação de cláusulas</li>
+            <li>Contrato assinado</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Cuidados importantes</h3>
+          <ul>
+            <li>Registrar o responsável pelo contrato.</li>
+            <li>Documentar cláusulas em discussão.</li>
+            <li>Anexar o documento assinado na etapa final.</li>
+            <li>Usar observações jurídicas de forma objetiva.</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure style="margin-top:18px;">
+        <img src="./imagens-manual/04-modulo-contratos.png" alt="Módulo de contratos">
+        <figcaption>Visão geral do acompanhamento contratual até a assinatura.</figcaption>
+      </figure>
+
+      <figure style="margin-top:18px;">
+        <img src="./imagens-manual/44-contratos-open.png" alt="Andamento contratual detalhado">
+        <figcaption>Bloco contratual com elaboração, cláusulas em discussão, minuta inicial e campo para contrato assinado.</figcaption>
+      </figure>
+    </section>
+
+    <section class="section card" id="gestao">
+      <h2>Dashboard, funil e administração</h2>
+      <p>Além da operação, o sistema oferece visão gerencial da carteira e controles estruturais para manter o ambiente organizado e seguro.</p>
+
+      <div class="gallery">
+        <figure>
+          <img src="./imagens-manual/27-admin-users-top.png" alt="Administrar usuários">
+          <figcaption>Cadastro, perfil, módulos liberados e etapas liberadas por usuário.</figcaption>
+        </figure>
+        <figure>
+          <img src="./imagens-manual/30-admin-config-better.png" alt="Configurações de listas">
+          <figcaption>Manutenção das listas configuráveis que alimentam os formulários do sistema.</figcaption>
+        </figure>
+      </div>
+
+      <div class="note">
+        A área administrativa foi preparada para reduzir dependência de alteração em código sempre que for preciso ajustar listas, categorias e opções recorrentes do processo.
+      </div>
+    </section>
+
+    <section class="section card" id="glossario-campos">
+      <h2>Glossário por módulo</h2>
+      <p>Esta seção foi organizada para explicar, de forma prática, para que serve cada campo principal de cada aba. O foco aqui é o uso operacional, não apenas a descrição técnica.</p>
+
+      <h3>Solicitações</h3>
+      <ul>
+        <li><strong>Prazo de entrega</strong>: define quando a área interna deve devolver a proposta ao comercial.</li>
+        <li><strong>Origem da oportunidade</strong>: informa de onde veio o lead e ajuda nas análises de captação.</li>
+        <li><strong>Email de faturamento</strong>: centraliza o contato financeiro do cliente para etapas futuras.</li>
+        <li><strong>Tipos de serviço</strong>: define o escopo principal do negócio e habilita a montagem operacional.</li>
+        <li><strong>Postos e equipamentos por serviço</strong>: detalha a operação por linha de serviço, facilitando orçamento e leitura técnica.</li>
+        <li><strong>Observações gerais</strong>: guarda contexto complementar importante para propostas e operação.</li>
+        <li><strong>Anexos iniciais</strong>: recebe materiais base enviados pelo cliente.</li>
+        <li><strong>Documentos técnicos do cliente</strong>: concentra arquivos que servem de apoio para cálculo e escopo.</li>
+      </ul>
+
+      <h3>Propostas</h3>
+      <ul>
+        <li><strong>Status da triagem</strong>: classifica o resultado da análise inicial da solicitação.</li>
+        <li><strong>Mover para etapa</strong>: determina para qual fase do fluxo a oportunidade será enviada.</li>
+        <li><strong>Observação da triagem</strong>: registra a justificativa da decisão tomada na análise.</li>
+        <li><strong>Responsável pela proposta</strong>: define quem assume a elaboração do material.</li>
+        <li><strong>Premissas comerciais</strong>: consolida regras comerciais que impactam a proposta.</li>
+        <li><strong>Premissas operacionais</strong>: registra bases técnicas e operacionais que sustentam o custo.</li>
+        <li><strong>PDF da proposta</strong>: anexa o documento final que será enviado ao vendedor.</li>
+        <li><strong>Motivo da pendência</strong>: descreve o que falta para a solicitação poder avançar.</li>
+      </ul>
+
+      <h3>Negociações</h3>
+      <ul>
+        <li><strong>Status da negociação</strong>: mostra o momento comercial atual do negócio.</li>
+        <li><strong>Último contato</strong>: registra quando houve a interação mais recente com o cliente.</li>
+        <li><strong>Previsão de fechamento</strong>: informa a expectativa comercial de conclusão.</li>
+        <li><strong>Próxima ação</strong>: define o próximo passo concreto do vendedor.</li>
+        <li><strong>Resumo da interação do dia</strong>: funciona como diário datado da negociação.</li>
+        <li><strong>Ajustes solicitados pelo cliente</strong>: reúne pedidos de mudança que podem voltar para propostas.</li>
+        <li><strong>Probabilidade</strong>: classifica a chance de fechamento e alimenta o funil.</li>
+        <li><strong>Motivo da probabilidade</strong>: justifica a classificação dada pelo vendedor.</li>
+        <li><strong>Anexo do aceite</strong>: armazena a evidência formal do aceite do cliente.</li>
+      </ul>
+
+      <h3>Contratos</h3>
+      <ul>
+        <li><strong>Responsável pelo contrato</strong>: define quem conduz a etapa jurídica.</li>
+        <li><strong>Início da elaboração</strong>: marca a data em que a minuta começou a ser tratada.</li>
+        <li><strong>Versão da minuta</strong>: controla revisões do documento contratual.</li>
+        <li><strong>Rodada de cláusulas</strong>: registra a data da negociação jurídica em andamento.</li>
+        <li><strong>Cláusulas em discussão</strong>: lista pontos sensíveis ainda em debate.</li>
+        <li><strong>Pendências documentais</strong>: mostra o que ainda falta para concluir a formalização.</li>
+        <li><strong>Minuta inicial</strong>: anexa o primeiro documento contratual base.</li>
+        <li><strong>Contrato assinado</strong>: armazena o arquivo final assinado que encerra o fluxo.</li>
+      </ul>
+
+      <h3>Administração</h3>
+      <ul>
+        <li><strong>Perfil</strong>: define o tipo de acesso do usuário.</li>
+        <li><strong>Módulos liberados</strong>: limita em quais áreas o usuário pode navegar.</li>
+        <li><strong>Etapas liberadas</strong>: controla em quais fases do workflow o usuário pode atuar.</li>
+        <li><strong>Status</strong>: ativa ou desativa o acesso sem apagar o histórico.</li>
+        <li><strong>Valor</strong> nas listas: representa o item exibido nos campos do sistema.</li>
+        <li><strong>Agrupamento</strong>: organiza listas por família ou categoria, quando necessário.</li>
+        <li><strong>Ordem</strong>: define a posição em que o item aparece para os usuários.</li>
+      </ul>
+
+      <h3>Dashboard e funil</h3>
+      <ul>
+        <li><strong>Data inicial</strong> e <strong>Data final</strong>: definem o período analisado no funil.</li>
+        <li><strong>Vendedor</strong>: filtra a carteira por responsável comercial.</li>
+        <li><strong>Filial</strong>: separa a análise por unidade comercial.</li>
+        <li><strong>Probabilidade</strong>: filtra oportunidades conforme chance de fechamento.</li>
+        <li><strong>Propostas por probabilidade</strong>: mostra distribuição de volume e valor por risco.</li>
+        <li><strong>Carteira por vendedor</strong>: mostra quem está com mais oportunidades e valor em carteira.</li>
+        <li><strong>Conversão por vendedor</strong>: compara entrada, aceite e fechamento por comercial.</li>
+      </ul>
+
+      <h3>Número da proposta</h3>
+      <ul>
+        <li><strong>Número / cliente / solicitação</strong>: campo de busca do histórico de propostas geradas.</li>
+        <li><strong>Status</strong>: classifica a situação do número gerado.</li>
+        <li><strong>Tipo</strong>: identifica a natureza do documento emitido.</li>
+        <li><strong>Valor total</strong>: registra o valor global da proposta.</li>
+        <li><strong>BDI / margem total</strong>: registra a margem consolidada da proposta.</li>
+        <li><strong>Detalhamento por serviço</strong>: quebra valores e margens por linha operacional.</li>
+        <li><strong>Arquivo da proposta</strong>: anexa o documento vinculado ao número.</li>
+      </ul>
+
+      <h3>Relatórios</h3>
+      <ul>
+        <li><strong>Data inicial</strong> e <strong>Data final</strong>: definem o período do relatório.</li>
+        <li><strong>Vendedor</strong>: filtra por responsável comercial.</li>
+        <li><strong>Etapa</strong>: separa registros pelo estágio do workflow.</li>
+        <li><strong>SLA</strong>: permite analisar prazo, risco e vencimento.</li>
+        <li><strong>Cliente / número</strong>: localiza um registro específico.</li>
+        <li><strong>Exportar Excel</strong>: gera a base para análise externa.</li>
+      </ul>
+
+      <h3>Alteração de senha</h3>
+      <ul>
+        <li><strong>Senha atual</strong>: confirma que o usuário é o titular do acesso.</li>
+        <li><strong>Nova senha</strong>: define a nova credencial.</li>
+        <li><strong>Confirmar nova senha</strong>: evita erro de digitação antes de salvar.</li>
+      </ul>
+    </section>
+
+    <section class="section card" id="regras">
+      <h2>Regras críticas e boas práticas</h2>
+      <div class="two-col">
+        <div>
+          <h3>Regras críticas</h3>
+          <ul>
+            <li>O número da proposta é obrigatório antes da finalização.</li>
+            <li>O PDF final deve estar anexo antes do envio ao vendedor.</li>
+            <li>O vendedor deve visualizar apenas os próprios negócios.</li>
+            <li>Dashboard e funil devem seguir a mesma regra de visibilidade.</li>
+            <li>Contrato assinado encerra o fluxo.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Boas práticas</h3>
+          <ul>
+            <li>Revisar o resumo antes de salvar a solicitação.</li>
+            <li>Preencher listas e cadastros com padrão consistente.</li>
+            <li>Alimentar o diário de negociação com frequência.</li>
+            <li>Evitar retrabalho e duplicidade de registros.</li>
+            <li>Manter as listas administrativas sempre atualizadas.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        Próxima rodada recomendada: complementar prints aproximados de triagem com <strong>Mover para etapa</strong>, finalização com PDF, probabilidade/resumo de negociação e telas contratuais detalhadas. A base ilustrada principal do manual já está pronta.
+      </div>
+    </section>
+  </main>
+</body>
+</html>
