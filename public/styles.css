@@ -1020,6 +1020,11 @@ input[type="file"] {
   align-items: end;
 }
 
+.admin-sla-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+}
+
 .proposal-registry-layout {
   display: grid;
   grid-template-columns: 1fr;

@@ -1999,6 +1999,72 @@ async function listLookupConfigurations() {
   });
 }
 
+async function listWorkflowStageConfigurations() {
+  const result = await query(
+    `SELECT
+       id,
+       code,
+       name,
+       sla_hours AS "slaHours",
+       sla_paused AS "slaPaused",
+       is_terminal AS "isTerminal",
+       is_active AS "isActive",
+       display_order AS "displayOrder"
+     FROM workflow_stages
+     ORDER BY display_order ASC, name ASC`
+  );
+  return result.rows;
+}
+
+async function updateWorkflowStageConfiguration(stageId, payload, session) {
+  const hasHours = Object.prototype.hasOwnProperty.call(payload, "slaHours");
+  const hasPaused = Object.prototype.hasOwnProperty.call(payload, "slaPaused");
+  if (!hasHours && !hasPaused) {
+    throw new Error("Nenhuma alteração de SLA informada.");
+  }
+
+  const normalizedHours = hasHours
+    ? (payload.slaHours === null || payload.slaHours === "" ? null : Number(payload.slaHours))
+    : undefined;
+  if (hasHours && normalizedHours !== null && (!Number.isFinite(normalizedHours) || normalizedHours < 0)) {
+    throw new Error("Informe um SLA válido em horas.");
+  }
+
+  const result = await query(
+    `UPDATE workflow_stages
+     SET sla_hours = CASE WHEN $4 THEN $2::int ELSE sla_hours END,
+         sla_paused = CASE WHEN $5 THEN $3::boolean ELSE sla_paused END
+     WHERE id = $1
+     RETURNING id, code, name, sla_hours AS "slaHours", sla_paused AS "slaPaused"`,
+    [
+      stageId,
+      hasHours ? normalizedHours : null,
+      hasPaused ? Boolean(payload.slaPaused) : null,
+      hasHours,
+      hasPaused
+    ]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Etapa de workflow não encontrada.");
+  }
+
+  await logAuditEntry(null, {
+    actor: session,
+    actionType: "workflow_stage_sla_updated",
+    entityType: "workflow_stage",
+    entityId: stageId,
+    description: `SLA da etapa ${result.rows[0].code} atualizado.`,
+    metadata: {
+      code: result.rows[0].code,
+      slaHours: result.rows[0].slaHours,
+      slaPaused: result.rows[0].slaPaused
+    }
+  });
+
+  return result.rows[0];
+}
+
 async function getNextLookupSortOrder(client, categoryKey, groupKey = null) {
   const category = getLookupCategoryConfig(categoryKey);
   if (category.source === "reason_table") {
@@ -5957,6 +6023,15 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/admin/workflow-stages-config") {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const items = await listWorkflowStageConfigurations();
+      sendJson(response, 200, items);
+      return;
+    }
+
     if (request.method === "POST" && /^\/api\/admin\/lookups-config\/[a-zA-Z0-9_]+$/.test(url.pathname)) {
       assertAuthenticated(session);
       assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
@@ -5992,6 +6067,18 @@ const server = http.createServer(async (request, response) => {
       const itemId = Number(pathParts[pathParts.length - 1]);
       await deactivateLookupConfigurationItem(categoryKey, itemId, session);
       sendJson(response, 200, { message: "Item retirado da lista com sucesso." });
+      return;
+    }
+
+    if (request.method === "PUT" && /^\/api\/admin\/workflow-stages-config\/\d+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const stageId = Number(url.pathname.split("/").pop());
+      const body = await readBody(request);
+      const payload = JSON.parse(body || "{}");
+      const item = await updateWorkflowStageConfiguration(stageId, payload, session);
+      sendJson(response, 200, { message: "SLA da etapa atualizado com sucesso.", item });
       return;
     }
 

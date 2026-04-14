@@ -950,6 +950,61 @@
                 </div>
               </form>
             </div>
+
+            <div class="card">
+              <div class="section-head">
+                <h2>SLA por etapa</h2>
+                <span>Defina horas de SLA e pausa por fase do workflow</span>
+              </div>
+              <div class="table-wrap compact-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Etapa</th>
+                      <th>Código</th>
+                      <th>SLA (horas)</th>
+                      <th>Pausado</th>
+                      <th>Terminal</th>
+                      <th>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-sla-table"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="section-head">
+                <h2>Editar SLA</h2>
+                <span>Ajuste os prazos padrão do processo</span>
+              </div>
+              <form id="admin-sla-form" class="form-layout">
+                <input id="admin-sla-stage-id" type="hidden" />
+                <div class="form-block compact-block">
+                  <div class="form-grid form-grid--wide admin-sla-grid">
+                    <div class="control control-span-2">
+                      <label for="admin-sla-stage-name">Etapa</label>
+                      <input id="admin-sla-stage-name" disabled />
+                    </div>
+                    <div class="control">
+                      <label for="admin-sla-hours">SLA em horas</label>
+                      <input id="admin-sla-hours" name="slaHours" type="number" min="0" step="1" placeholder="Ex.: 24" />
+                    </div>
+                    <div class="control">
+                      <label for="admin-sla-paused">Pausar SLA</label>
+                      <select id="admin-sla-paused" name="slaPaused">
+                        <option value="false">Nao</option>
+                        <option value="true">Sim</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="button-row compact-actions">
+                    <button type="submit" class="primary">Salvar SLA</button>
+                    <button type="button" class="secondary" id="admin-sla-reset">Limpar</button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </section>

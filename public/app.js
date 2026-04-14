@@ -305,6 +305,7 @@ let adminLookupConfigCache = {
   itemsByCategory: {},
   groupOptions: {}
 };
+let adminWorkflowStagesCache = [];
 let activeAdminLookupCategory = "";
 let negotiationFiltersState = {
   dateStart: "",
@@ -1210,6 +1211,42 @@ function resetAdminLookupForm() {
   document.getElementById("admin-lookup-category-key").value = activeAdminLookupCategory || "";
   document.getElementById("admin-lookup-active").value = "true";
   syncAdminLookupGroupControl(activeAdminLookupCategory);
+}
+
+function renderAdminWorkflowStages(items = adminWorkflowStagesCache) {
+  const table = document.getElementById("admin-sla-table");
+  if (!table) return;
+  if (!items.length) {
+    table.innerHTML = `<tr><td colspan="6" class="muted">Nenhuma etapa encontrada.</td></tr>`;
+    return;
+  }
+
+  table.innerHTML = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.code)}</td>
+      <td>${item.slaHours ?? "Sem SLA"}</td>
+      <td>${item.slaPaused ? "Sim" : "Nao"}</td>
+      <td>${item.isTerminal ? "Sim" : "Nao"}</td>
+      <td><button type="button" class="table-action admin-sla-edit" data-stage-id="${item.id}">Editar</button></td>
+    </tr>
+  `).join("");
+}
+
+function populateAdminWorkflowStageForm(item = null) {
+  document.getElementById("admin-sla-stage-id").value = item?.id || "";
+  document.getElementById("admin-sla-stage-name").value = item ? `${item.name} (${item.code})` : "";
+  document.getElementById("admin-sla-hours").value = item?.slaHours ?? "";
+  document.getElementById("admin-sla-paused").value = String(item?.slaPaused ?? false);
+}
+
+function resetAdminWorkflowStageForm() {
+  const form = document.getElementById("admin-sla-form");
+  if (!form) return;
+  form.reset();
+  document.getElementById("admin-sla-stage-id").value = "";
+  document.getElementById("admin-sla-stage-name").value = "";
+  document.getElementById("admin-sla-paused").value = "false";
 }
 
 function setActiveAdminLookupCategory(categoryKey) {
@@ -2390,6 +2427,7 @@ function buildContractPayload() {
   const form = new FormData(document.getElementById("contract-form"));
   return {
     requestId: form.get("requestId"),
+    proposalRegistryId: form.get("proposalRegistryId"),
     contractOwnerName: form.get("contractOwnerName"),
     contractOwnerEmail: form.get("contractOwnerEmail"),
     contractStartedAt: form.get("contractStartedAt"),
@@ -2408,7 +2446,7 @@ function buildContractPayload() {
 
 function validateContractPayload(payload) {
   const missing = [];
-  if (!payload.requestId) missing.push("Selecione uma solicitacao");
+  if (!payload.requestId && !payload.proposalRegistryId) missing.push("Selecione uma solicitacao");
   if (!payload.contractOwnerName) missing.push("Responsável pelo contrato");
   if (!payload.contractOwnerEmail) missing.push("Email do responsável");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
@@ -2989,19 +3027,23 @@ function exportSalesFunnel() {
 
 async function loadAdminModule() {
   if (!rolePermissions(currentRole).manageUsers) return;
-  const [users, roles, auditLogs, lookupConfig] = await Promise.all([
+  const [users, roles, auditLogs, lookupConfig, workflowStages] = await Promise.all([
     loadJson("/api/admin/users"),
     loadJson("/api/admin/roles"),
     loadJson("/api/admin/audit-logs"),
-    loadJson("/api/admin/lookups-config")
+    loadJson("/api/admin/lookups-config"),
+    loadJson("/api/admin/workflow-stages-config")
   ]);
   adminUsersCache = users;
   auditLogsCache = auditLogs;
   availableRoles = roles;
   adminLookupConfigCache = lookupConfig;
+  adminWorkflowStagesCache = workflowStages;
   populateRoleSelect(roles);
   renderAdminUsers(users);
   renderAuditLogs(auditLogs);
+  renderAdminWorkflowStages(workflowStages);
+  resetAdminWorkflowStageForm();
   const availableCategory = getAdminLookupCategoryMeta(activeAdminLookupCategory)
     ? activeAdminLookupCategory
     : lookupConfig.categories?.[0]?.key;
@@ -3740,6 +3782,19 @@ async function bootstrap() {
     }
   });
 
+  document.getElementById("admin-sla-table").addEventListener("click", (event) => {
+    const button = event.target.closest(".admin-sla-edit");
+    if (!button) return;
+    const item = adminWorkflowStagesCache.find((entry) => String(entry.id) === String(button.dataset.stageId));
+    if (item) {
+      populateAdminWorkflowStageForm(item);
+    }
+  });
+
+  document.getElementById("admin-sla-reset").addEventListener("click", () => {
+    resetAdminWorkflowStageForm();
+  });
+
   document.getElementById("admin-user-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const userId = document.getElementById("admin-user-id").value;
@@ -3831,6 +3886,43 @@ async function bootstrap() {
       alert(result.message || "Item salvo com sucesso.");
     } catch (error) {
       alert(`Não foi possível salvar o item da lista: ${error.message}`);
+    }
+  });
+
+  document.getElementById("admin-sla-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const stageId = document.getElementById("admin-sla-stage-id").value;
+    if (!stageId) {
+      alert("Selecione uma etapa para editar o SLA.");
+      return;
+    }
+
+    const rawHours = document.getElementById("admin-sla-hours").value.trim();
+    const payload = {
+      slaHours: rawHours === "" ? null : Number(rawHours),
+      slaPaused: document.getElementById("admin-sla-paused").value === "true"
+    };
+
+    if (rawHours !== "" && (!Number.isFinite(payload.slaHours) || payload.slaHours < 0)) {
+      alert("Informe um SLA valido em horas.");
+      return;
+    }
+
+    try {
+      const response = await fetchWithSession(`/api/admin/workflow-stages-config/${stageId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Falha ao atualizar o SLA.");
+      }
+
+      await Promise.all([loadAdminModule(), reloadApplicationLookups()]);
+      alert(result.message || "SLA atualizado com sucesso.");
+    } catch (error) {
+      alert(`Não foi possível atualizar o SLA: ${error.message}`);
     }
   });
 }
