@@ -4602,7 +4602,7 @@ async function getDashboardFromDb(filters = {}, session = null) {
     })
   );
 
-  const probabilityOrder = ["Alta", "Media", "Baixa"];
+  const probabilityOrder = ["Alta", "Media", "Baixa", "Ganho"];
   const byProbability = buildBarItems(
     probabilityOrder.map((label) => {
       const matches = salesRows.filter((row) => row.probabilityLevel === label);

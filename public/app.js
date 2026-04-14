@@ -2,7 +2,7 @@
   const normalized = String(value || "").toLowerCase();
   if (normalized.includes("venc")) return "danger";
   if (normalized.includes("risco") || normalized.includes("hoje")) return "warn";
-  if (normalized.includes("prazo") || normalized.includes("assinado")) return "ok";
+  if (normalized.includes("prazo") || normalized.includes("assinado") || normalized.includes("ganh")) return "ok";
   return "info";
 }
 
@@ -158,6 +158,7 @@ const MODULE_STAGE_CONFIG = {
     { code: "cancelada", label: "Cancelada" }
   ],
   contratos: [
+    { code: "proposta_aceita", label: "Proposta Ganha" },
     { code: "elaboracao_de_contrato", label: "Elaboracao de contrato" },
     { code: "negociacao_de_clausulas", label: "Negociacao de clausulas" },
     { code: "contrato_assinado", label: "Contrato assinado" }

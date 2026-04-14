@@ -344,9 +344,12 @@ button {
 .metric .value { font-size: 24px; font-weight: 800; margin-top: 6px; }
 .proposal-metric .value,
 .executive-metric .value {
-  font-size: clamp(18px, 2vw, 24px);
-  line-height: 1.15;
-  word-break: break-word;
+  font-size: clamp(15px, 1.55vw, 20px);
+  line-height: 1.08;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  letter-spacing: -0.03em;
 }
 .metric .tag, .pill {
   display: inline-block;
