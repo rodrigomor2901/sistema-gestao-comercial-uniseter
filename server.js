@@ -462,6 +462,7 @@ function shouldRefreshStageAccess(stageAccess, roleName) {
       "cancelada"
     ],
     juridico: [
+      "proposta_aceita",
       "elaboracao_de_contrato",
       "negociacao_de_clausulas",
       "contrato_assinado"
@@ -5352,6 +5353,49 @@ async function saveCommercialRecord(payload, session) {
       );
     }
 
+    if (requestResult.rows[0].proposalRegistryId) {
+      await client.query(
+        `UPDATE proposal_registry
+         SET manager_name = COALESCE($2, manager_name),
+             negotiation_status = $3,
+             notes = $4,
+             probability_level = $5,
+             probability_reason = $6,
+             next_action = $7,
+             expected_close_date = $8::date,
+             last_contact_at = $9::timestamptz,
+             sent_to_seller_at = $10::timestamptz,
+             seller_receipt_confirmed = $11,
+             requested_adjustments = $12,
+             seller_user_id = $13,
+             accepted_at = $14::timestamptz,
+             accepted_scope = $15,
+             accepted_conditions = $16,
+             accepted_note = $17,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [
+          requestResult.rows[0].proposalRegistryId,
+          payload.sellerName || null,
+          mapProposalStageCodeToStatus(payload.nextStageCode, payload.negotiationStatus || null),
+          payload.commercialNotes || null,
+          payload.probabilityLevel || null,
+          payload.probabilityReason || null,
+          payload.nextAction || null,
+          payload.expectedCloseDate || null,
+          payload.lastContactAt || null,
+          payload.sentToSellerAt || null,
+          payload.sellerReceiptConfirmed === "true",
+          payload.requestedAdjustments || null,
+          sellerUserId,
+          payload.acceptedAt || null,
+          payload.acceptedScope || null,
+          payload.acceptedConditions || null,
+          payload.acceptedNote || null
+        ]
+      );
+    }
+
     const stageChanged = Number(nextStageId) !== Number(currentStageId);
 
     await client.query(
@@ -5506,12 +5550,21 @@ async function saveContractRecord(payload, session) {
       return { proposalRegistryId };
     }
 
-    const nextStageId = await getStageId(client, payload.nextStageCode);
-
     const requestResult = await client.query(
-      `SELECT r.current_stage_id, ws.code AS current_stage_code
+      `SELECT
+         r.current_stage_id,
+         ws.code AS current_stage_code,
+         linked_proposal.id AS proposal_registry_id,
+         ${buildProposalStageCodeSql("linked_proposal")} AS proposal_stage_code
        FROM requests r
        JOIN workflow_stages ws ON ws.id = r.current_stage_id
+       LEFT JOIN LATERAL (
+         SELECT *
+         FROM proposal_registry
+         WHERE request_id = r.id
+         ORDER BY id DESC
+         LIMIT 1
+       ) linked_proposal ON TRUE
        WHERE r.id = $1`,
       [requestId]
     );
@@ -5521,7 +5574,8 @@ async function saveContractRecord(payload, session) {
     }
 
     const currentStageId = requestResult.rows[0].current_stage_id;
-    const currentStageCode = requestResult.rows[0].current_stage_code;
+    const currentStageCode = requestResult.rows[0].proposal_stage_code || requestResult.rows[0].current_stage_code || "proposta_aceita";
+    const linkedProposalRegistryId = requestResult.rows[0].proposal_registry_id;
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
@@ -5604,32 +5658,42 @@ async function saveContractRecord(payload, session) {
       );
     }
 
+    if (linkedProposalRegistryId) {
+      await client.query(
+        `UPDATE proposal_registry
+         SET manager_name = COALESCE($2, manager_name),
+             negotiation_status = $3,
+             contract_started_at = $4::timestamptz,
+             draft_version = $5,
+             clause_round_date = $6::timestamptz,
+             notes = COALESCE($7, notes),
+             document_pending_notes = $8,
+             operation_start_date = $9::date,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [
+          linkedProposalRegistryId,
+          payload.contractOwnerName || null,
+          mapProposalStageCodeToStatus(payload.nextStageCode, null),
+          payload.contractStartedAt || null,
+          payload.draftVersion || null,
+          payload.clauseRoundDate || null,
+          payload.contractNotes || null,
+          payload.documentPendingNotes || null,
+          payload.operationStartDate || null
+        ]
+      );
+    }
+
     await client.query(
       `UPDATE requests
-       SET current_stage_id = $2,
-           current_owner_user_id = $3,
+       SET current_stage_id = current_stage_id,
+           current_owner_user_id = current_owner_user_id,
            updated_at = NOW(),
            status_final = CASE WHEN $4 = 'contrato_assinado' THEN 'Contrato assinado' ELSE status_final END,
            closed_at = CASE WHEN $4 = 'contrato_assinado' THEN NOW() ELSE closed_at END
        WHERE id = $1`,
-      [requestId, nextStageId, contractOwnerId, payload.nextStageCode]
-    );
-
-    await client.query(
-      `INSERT INTO request_stage_history (
-        request_id, from_stage_id, to_stage_id, changed_by_user_id,
-        owner_user_id, entered_at, sla_deadline_at, sla_status, note
-      )
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), $6, $7)`,
-      [
-        requestId,
-        currentStageId,
-        nextStageId,
-        contractOwnerId,
-        contractOwnerId,
-        "ok",
-        payload.nextAction || payload.legalNotes || payload.contractNotes || "Contratual atualizado."
-      ]
+      [requestId, currentStageId, contractOwnerId, payload.nextStageCode]
     );
 
     await logAuditEntry(client, {

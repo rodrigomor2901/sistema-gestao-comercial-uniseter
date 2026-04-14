@@ -661,6 +661,22 @@ function buildNegotiationRows(baseRows = []) {
   return [...baseRows, ...proposalOnlyRows];
 }
 
+function buildContractRows() {
+  return proposalNumberAllRowsCache.map((item) => ({
+    id: item.requestId || "",
+    requestNumber: item.requestNumber || "-",
+    proposalNumber: item.proposalNumberDisplay,
+    proposalRegistryId: item.id,
+    company: item.clientName || "-",
+    seller: item.manager || "-",
+    currentStage: item.stageLabel || "Proposta Ganha",
+    stageCode: item.stageCode || "proposta_aceita",
+    slaStatus: item.stageCode === "contrato_assinado" ? "Encerrado" : "Sem SLA",
+    currentOwner: item.manager || "-",
+    updatedAt: item.issueDate || "-"
+  }));
+}
+
 function parseBrDate(value) {
   const text = String(value || "").trim();
   const match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
@@ -979,7 +995,7 @@ function defaultStageAccessForRole(roleName) {
     vendedor: ["solicitacao_criada", "aguardando_informacoes", "enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
     comercial_interno: [...ALL_STAGE_CODES],
     propostas: ["em_triagem", "aguardando_informacoes", "em_preparacao_da_proposta", "proposta_finalizada"],
-    juridico: ["elaboracao_de_contrato", "negociacao_de_clausulas", "contrato_assinado"],
+    juridico: ["proposta_aceita", "elaboracao_de_contrato", "negociacao_de_clausulas", "contrato_assinado"],
     gestor: [...ALL_STAGE_CODES],
     diretoria: [...ALL_STAGE_CODES],
     administrador: [...ALL_STAGE_CODES]
@@ -1344,7 +1360,7 @@ function renderAllStageBoards(rows) {
     if (moduleKey === "negociacoes") {
       moduleRows = applyNegotiationFilters(buildNegotiationRows(rows));
     } else if (moduleKey === "contratos") {
-      moduleRows = buildNegotiationRows(rows);
+      moduleRows = buildContractRows();
     }
     renderStageBoard(moduleKey, moduleRows);
   });
@@ -3129,13 +3145,28 @@ async function bootstrap() {
       activeModuleStage[stageTab.dataset.module] = stageTab.dataset.stageCode;
       const stageRows = stageTab.dataset.module === "negociacoes"
         ? applyNegotiationFilters(buildNegotiationRows(reportRowsCache))
-        : reportRowsCache;
+        : stageTab.dataset.module === "contratos"
+          ? buildContractRows()
+          : reportRowsCache;
       renderStageBoard(stageTab.dataset.module, stageRows);
       return;
     }
 
     const stageRow = event.target.closest(".stage-table-row");
     if (!stageRow) return;
+
+    if ((stageRow.dataset.moduleKey || currentView) === "contratos" && stageRow.dataset.proposalId) {
+      try {
+        const detail = await loadProposalNumberDetail(stageRow.dataset.proposalId);
+        renderProposalOnlyContext(detail);
+        populateContractForm(detail);
+        setActiveView("contratos");
+        scrollToWorkflowForm("contratos");
+      } catch (error) {
+        alert(`Nao foi possivel carregar o contrato: ${error.message}`);
+      }
+      return;
+    }
 
     if (stageRow.dataset.proposalId && !stageRow.dataset.requestId) {
       try {
