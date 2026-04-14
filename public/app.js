@@ -1271,7 +1271,7 @@ async function deleteRequestAndRefresh(requestId) {
       renderDetail(requestDetailFallback());
       renderHistory([]);
       renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
-      renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_aceite"]);
+      renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
       populateProposalForm(requestDetailFallback());
       populateCommercialForm(requestDetailFallback());
       populateContractForm(requestDetailFallback());
@@ -1731,12 +1731,54 @@ function preferredWorkflowView(detail, fallbackView = "solicitacoes") {
   return workflowViewFromStage(detail?.stageCode, fallbackView);
 }
 
+function renderProposalNextStageOptions(stageCode) {
+  const select = document.getElementById("next-stage-code");
+  if (!select) return;
+
+  const optionsByStage = {
+    em_triagem: [
+      { value: "em_triagem", label: "Em triagem" },
+      { value: "aguardando_informacoes", label: "Aguardando informações" },
+      { value: "em_preparacao_da_proposta", label: "Em Elaboração da Proposta" }
+    ],
+    aguardando_informacoes: [
+      { value: "aguardando_informacoes", label: "Aguardando informações" },
+      { value: "em_triagem", label: "Em triagem" },
+      { value: "em_preparacao_da_proposta", label: "Em Elaboração da Proposta" }
+    ],
+    em_preparacao_da_proposta: [
+      { value: "em_preparacao_da_proposta", label: "Em Elaboração da Proposta" },
+      { value: "aguardando_informacoes", label: "Aguardando informações" },
+      { value: "proposta_finalizada", label: "Proposta finalizada" }
+    ],
+    proposta_finalizada: [
+      { value: "proposta_finalizada", label: "Proposta finalizada" },
+      { value: "enviada_ao_vendedor", label: "Recebimento de Proposta" }
+    ]
+  };
+
+  const options = optionsByStage[stageCode] || [
+    { value: "em_triagem", label: "Em triagem" },
+    { value: "aguardando_informacoes", label: "Aguardando informações" },
+    { value: "em_preparacao_da_proposta", label: "Em Elaboração da Proposta" },
+    { value: "proposta_finalizada", label: "Proposta finalizada" },
+    { value: "enviada_ao_vendedor", label: "Recebimento de Proposta" }
+  ];
+
+  select.innerHTML = [
+    '<option value=""></option>',
+    ...options.map((item) => `<option value="${item.value}">${item.label}</option>`)
+  ].join("");
+  select.value = "";
+}
+
 function populateProposalForm(detail) {
   document.getElementById("selected-request-id").value = detail.id || "";
   document.getElementById("selected-request-number").value = detail.requestNumber || "";
   document.getElementById("selected-request-company").value = detail.company || "";
   document.getElementById("selected-request-stage").value = detail.stage || "";
   document.getElementById("selected-request-proposal-number").value = detail.proposalNumber || "Nao gerado";
+  renderProposalNextStageOptions(detail.stageCode);
   document.getElementById("next-stage-code").value = "";
   document.getElementById("triage-owner-name").value = detail.triageOwnerName || currentUser.name || "";
   document.getElementById("triage-owner-email").value = detail.triageOwnerEmail || currentUser.email || "";
@@ -2946,7 +2988,7 @@ async function loadAuthenticatedAppData() {
   renderDetail(initialDetail);
   renderHistory(initialDetail.history || []);
   renderAttachmentList("proposal-attachments", initialAttachments, ["anexo_inicial", "documento_tecnico_cliente"]);
-  renderAttachmentList("commercial-attachments", initialAttachments, ["proposta_final_pdf", "anexo_aceite"]);
+  renderAttachmentList("commercial-attachments", initialAttachments, ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
   await renderRequestFormPreview();
   populateRequestForm(initialDetail);
   resetProposalNumberForm();
@@ -2972,7 +3014,7 @@ async function selectRequest(requestId) {
   renderDetail(detail);
   renderHistory(detail.history || []);
   renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente"]);
-  renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_aceite"]);
+  renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
   populateRequestForm(detail);
   populateProposalForm(detail);
   populateCommercialForm(detail);
@@ -3215,7 +3257,7 @@ async function bootstrap() {
         renderDetail(requestDetailFallback());
         renderHistory([]);
         renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
-        renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_aceite"]);
+        renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
         resetRequestForm();
         populateProposalForm(requestDetailFallback());
         populateCommercialForm(requestDetailFallback());
@@ -3246,7 +3288,8 @@ async function bootstrap() {
     event.preventDefault();
     const payload = {
       ...buildProposalPayload(),
-      proposalFinalPdf: await collectFiles("proposal-final-pdf", false)
+      proposalFinalPdf: await collectFiles("proposal-final-pdf", false),
+      proposalSupportingFiles: await collectFiles("proposal-supporting-files")
     };
     const missing = validateProposalPayload(payload);
 
@@ -3283,6 +3326,10 @@ async function bootstrap() {
         const targetView = preferredWorkflowView(refreshedDetail, "propostas");
         setActiveView(targetView);
         scrollToWorkflowForm(targetView);
+      }
+      if (payload.nextStageCode === "enviada_ao_vendedor") {
+        setActiveView("negociacoes");
+        scrollToWorkflowForm("negociacoes");
       }
       alert(result.message || "Triagem salva com sucesso.");
     } catch (error) {

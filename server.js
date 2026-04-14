@@ -515,7 +515,7 @@ function assertAnyModuleAccess(session, moduleNames, message) {
 function canDownloadAttachment(session, attachmentType) {
   const role = session?.role || "vendedor";
   const sensitiveContract = ["minuta_inicial", "contrato_assinado"];
-  const sellerDocs = ["anexo_inicial", "documento_tecnico_cliente", "proposta_final_pdf", "anexo_aceite"];
+  const sellerDocs = ["anexo_inicial", "documento_tecnico_cliente", "proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"];
 
   if (role === "administrador" || role === "comercial_interno") return true;
   if (role === "diretoria" || role === "gestor") return true;
@@ -4789,6 +4789,7 @@ function attachmentLabel(type) {
     anexo_inicial: "Anexo inicial",
     documento_tecnico_cliente: "Documento tecnico do cliente",
     proposta_final_pdf: "PDF da proposta",
+    anexo_proposta_complementar: "Arquivo complementar da proposta",
     anexo_aceite: "Anexo do aceite",
     minuta_inicial: "Minuta inicial",
     contrato_assinado: "Contrato assinado"
@@ -4901,6 +4902,7 @@ async function saveProposalRecord(payload, session) {
       `SELECT
          r.current_stage_id,
          r.current_owner_user_id,
+         r.seller_user_id,
          ws.code AS current_stage_code,
          linked_proposal.id AS "proposalRegistryId",
          linked_proposal.proposal_number_display AS "proposalNumber"
@@ -4923,7 +4925,9 @@ async function saveProposalRecord(payload, session) {
 
     const currentStageId = requestResult.rows[0].current_stage_id;
     const currentStageCode = requestResult.rows[0].current_stage_code;
-    const nextOwnerId = proposalOwnerId || triageOwnerId || requestResult.rows[0].current_owner_user_id;
+    const nextOwnerId = payload.nextStageCode === "enviada_ao_vendedor"
+      ? requestResult.rows[0].seller_user_id
+      : (proposalOwnerId || triageOwnerId || requestResult.rows[0].current_owner_user_id);
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da proposta.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
@@ -4951,6 +4955,13 @@ async function saveProposalRecord(payload, session) {
       attachmentType: "proposta_final_pdf",
       file: payload.proposalFinalPdf,
       description: "PDF final da proposta"
+    });
+    await createAttachmentRecords(client, {
+      requestId,
+      uploadedByUserId: triageOwnerId || proposalOwnerId,
+      attachmentType: "anexo_proposta_complementar",
+      files: payload.proposalSupportingFiles,
+      description: "Arquivo complementar da proposta"
     });
 
     if (existing.rows[0]) {

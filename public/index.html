@@ -1319,6 +1319,7 @@
                   <option value="aguardando_informacoes">Aguardando informações</option>
                   <option value="em_preparacao_da_proposta">Em Elaboração da Proposta</option>
                   <option value="proposta_finalizada">Proposta finalizada</option>
+                  <option value="enviada_ao_vendedor">Recebimento de Proposta</option>
                 </select>
               </div>
               <div class="control control-span-3">
@@ -1362,6 +1363,11 @@
               <div class="control control-span-2">
                 <label for="proposal-final-pdf">PDF da proposta</label>
                 <input id="proposal-final-pdf" name="proposalFinalPdf" type="file" accept=".pdf" />
+              </div>
+              <div class="control control-span-2">
+                <label for="proposal-supporting-files">Arquivos complementares da proposta</label>
+                <input id="proposal-supporting-files" name="proposalSupportingFiles" type="file" multiple accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.ppt,.pptx" />
+                <small class="control-help">Use para planilha aberta, proposta técnica e outros arquivos de apoio antes de enviar para Recebimento de Proposta.</small>
               </div>
             </div>
           </div>
