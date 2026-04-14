@@ -1014,6 +1014,26 @@ function mapProposalStageCodeToStatus(nextStageCode, fallbackStatus = null) {
   return mapping[nextStageCode] || fallbackStatus || "Em negociacao";
 }
 
+const WORKFLOW_STAGE_LABELS = {
+  solicitacao_criada: "Solicitacao criada",
+  em_triagem: "Em triagem",
+  aguardando_informacoes: "Aguardando informacoes",
+  em_preparacao_da_proposta: "Em Elaboracao da Proposta",
+  proposta_finalizada: "Proposta finalizada",
+  enviada_ao_vendedor: "Recebimento de Proposta",
+  em_negociacao: "Em negociacao",
+  proposta_aceita: "Proposta Ganha",
+  perdida: "Perdida",
+  cancelada: "Cancelada",
+  elaboracao_de_contrato: "Elaboracao de contrato",
+  negociacao_de_clausulas: "Negociacao de clausulas",
+  contrato_assinado: "Contrato assinado"
+};
+
+function getWorkflowStageLabel(stageCode) {
+  return WORKFLOW_STAGE_LABELS[String(stageCode || "").trim()] || String(stageCode || "").trim() || "Etapa atualizada";
+}
+
 function toUpperOrNull(value) {
   const text = String(value || "").trim();
   return text ? text.toUpperCase() : null;
@@ -1460,6 +1480,38 @@ async function ensureNegotiationDiaryTable() {
   `);
 }
 
+async function ensureNotificationTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      id BIGSERIAL PRIMARY KEY,
+      recipient_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      request_id BIGINT REFERENCES requests(id) ON DELETE CASCADE,
+      proposal_registry_id BIGINT REFERENCES proposal_registry(id) ON DELETE CASCADE,
+      notification_type VARCHAR(80) NOT NULL DEFAULT 'status_change',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      from_stage_code VARCHAR(80),
+      to_stage_code VARCHAR(80),
+      actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      actor_name VARCHAR(150),
+      actor_email VARCHAR(255),
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      read_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_user_notifications_recipient_created
+    ON user_notifications(recipient_user_id, created_at DESC, id DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_user_notifications_recipient_read
+    ON user_notifications(recipient_user_id, is_read, created_at DESC, id DESC)
+  `);
+}
+
 async function ensureAppLookupOptionsTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS app_lookup_options (
@@ -1756,6 +1808,202 @@ async function listNegotiationDiaryEntries(filters = {}) {
   );
 
   return result.rows;
+}
+
+async function collectRequestNotificationRecipientIds(client, requestId, extraUserIds = []) {
+  const result = await client.query(
+    `SELECT
+       r.seller_user_id AS "sellerUserId",
+       r.current_owner_user_id AS "currentOwnerUserId",
+       pr.triage_owner_user_id AS "triageOwnerUserId",
+       pr.proposal_owner_user_id AS "proposalOwnerUserId",
+       cr.seller_user_id AS "commercialSellerUserId",
+       ctr.contract_owner_user_id AS "contractOwnerUserId"
+     FROM requests r
+     LEFT JOIN proposal_records pr ON pr.request_id = r.id
+     LEFT JOIN commercial_records cr ON cr.request_id = r.id
+     LEFT JOIN contract_records ctr ON ctr.request_id = r.id
+     WHERE r.id = $1`,
+    [requestId]
+  );
+
+  const row = result.rows[0] || {};
+  return [...new Set([
+    row.sellerUserId,
+    row.currentOwnerUserId,
+    row.triageOwnerUserId,
+    row.proposalOwnerUserId,
+    row.commercialSellerUserId,
+    row.contractOwnerUserId,
+    ...(extraUserIds || [])
+  ].filter((item) => Number.isInteger(Number(item)) && Number(item) > 0).map((item) => Number(item)))];
+}
+
+async function collectProposalNotificationRecipientIds(client, proposalRegistryId, extraUserIds = []) {
+  const result = await client.query(
+    `SELECT request_id AS "requestId", seller_user_id AS "sellerUserId"
+     FROM proposal_registry
+     WHERE id = $1`,
+    [proposalRegistryId]
+  );
+  const proposal = result.rows[0];
+  if (!proposal) {
+    return [...new Set((extraUserIds || []).filter((item) => Number.isInteger(Number(item)) && Number(item) > 0).map((item) => Number(item)))];
+  }
+
+  const requestRecipients = proposal.requestId
+    ? await collectRequestNotificationRecipientIds(client, proposal.requestId, extraUserIds)
+    : [];
+
+  return [...new Set([
+    proposal.sellerUserId,
+    ...requestRecipients,
+    ...(extraUserIds || [])
+  ].filter((item) => Number.isInteger(Number(item)) && Number(item) > 0).map((item) => Number(item)))];
+}
+
+async function createStatusChangeNotifications(client, {
+  recipientUserIds = [],
+  actor = {},
+  requestId = null,
+  proposalRegistryId = null,
+  fromStageCode = null,
+  toStageCode = null,
+  requestNumber = null,
+  proposalNumber = null,
+  company = null,
+  note = null
+} = {}) {
+  if (!toStageCode || String(fromStageCode || "") === String(toStageCode || "")) {
+    return [];
+  }
+
+  const actorUserId = parsePositiveInteger(actor.userId);
+  const recipients = [...new Set(
+    (recipientUserIds || [])
+      .map((item) => parsePositiveInteger(item))
+      .filter((item) => item && item !== actorUserId)
+  )];
+
+  if (!recipients.length) return [];
+
+  const title = `Status atualizado para ${getWorkflowStageLabel(toStageCode)}`;
+  const origin = requestNumber
+    ? `${requestNumber}${company ? ` | ${company}` : ""}`
+    : proposalNumber
+      ? `${proposalNumber}${company ? ` | ${company}` : ""}`
+      : (company || "Solicitacao atualizada");
+  const movement = fromStageCode
+    ? `${getWorkflowStageLabel(fromStageCode)} -> ${getWorkflowStageLabel(toStageCode)}`
+    : `Nova etapa: ${getWorkflowStageLabel(toStageCode)}`;
+  const actorLabel = buildHistoryActorLabel(actor.name, actor.email);
+  const message = [origin, movement, `Responsavel pela atualizacao: ${actorLabel}`, String(note || "").trim()]
+    .filter(Boolean)
+    .join(" | ");
+
+  const createdIds = [];
+  for (const recipientUserId of recipients) {
+    const result = await client.query(
+      `INSERT INTO user_notifications (
+        recipient_user_id,
+        request_id,
+        proposal_registry_id,
+        notification_type,
+        title,
+        message,
+        from_stage_code,
+        to_stage_code,
+        actor_user_id,
+        actor_name,
+        actor_email
+      ) VALUES (
+        $1, $2, $3, 'status_change', $4, $5, $6, $7, $8, $9, $10
+      )
+      RETURNING id`,
+      [
+        recipientUserId,
+        requestId || null,
+        proposalRegistryId || null,
+        title,
+        message,
+        fromStageCode || null,
+        toStageCode || null,
+        actorUserId || null,
+        actor.name || null,
+        actor.email || null
+      ]
+    );
+    if (result.rows[0]?.id) {
+      createdIds.push(result.rows[0].id);
+    }
+  }
+
+  return createdIds;
+}
+
+async function listUserNotifications(userId, limit = 20) {
+  const safeLimit = Math.min(Math.max(parsePositiveInteger(limit) || 20, 1), 50);
+  const result = await query(
+    `SELECT
+       id,
+       request_id AS "requestId",
+       proposal_registry_id AS "proposalRegistryId",
+       notification_type AS "type",
+       title,
+       message,
+       from_stage_code AS "fromStageCode",
+       to_stage_code AS "toStageCode",
+       is_read AS "isRead",
+       created_at AS "createdAt",
+       TO_CHAR(created_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS "createdAtLabel"
+     FROM user_notifications
+     WHERE recipient_user_id = $1
+     ORDER BY created_at DESC, id DESC
+     LIMIT $2`,
+    [userId, safeLimit]
+  );
+
+  const unreadCountResult = await query(
+    `SELECT COUNT(*)::int AS total
+     FROM user_notifications
+     WHERE recipient_user_id = $1
+       AND is_read = FALSE`,
+    [userId]
+  );
+
+  return {
+    items: result.rows,
+    unreadCount: unreadCountResult.rows[0]?.total || 0
+  };
+}
+
+async function markUserNotificationAsRead(notificationId, userId) {
+  const result = await query(
+    `UPDATE user_notifications
+     SET is_read = TRUE,
+         read_at = COALESCE(read_at, NOW())
+     WHERE id = $1
+       AND recipient_user_id = $2
+     RETURNING id`,
+    [notificationId, userId]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Notificacao nao encontrada.");
+  }
+
+  return result.rows[0];
+}
+
+async function markAllUserNotificationsAsRead(userId) {
+  await query(
+    `UPDATE user_notifications
+     SET is_read = TRUE,
+         read_at = COALESCE(read_at, NOW())
+     WHERE recipient_user_id = $1
+       AND is_read = FALSE`,
+    [userId]
+  );
 }
 
 async function ensureLookupValues(client, tableName, names) {
@@ -4993,6 +5241,7 @@ async function saveProposalRecord(payload, session) {
 
     const requestResult = await client.query(
       `SELECT
+         r.request_number,
          r.current_stage_id,
          r.current_owner_user_id,
          r.seller_user_id,
@@ -5021,6 +5270,7 @@ async function saveProposalRecord(payload, session) {
     const nextOwnerId = payload.nextStageCode === "enviada_ao_vendedor"
       ? requestResult.rows[0].seller_user_id
       : (proposalOwnerId || triageOwnerId || requestResult.rows[0].current_owner_user_id);
+    const stageChanged = Number(nextStageId) !== Number(currentStageId);
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da proposta.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
@@ -5160,6 +5410,31 @@ async function saveProposalRecord(payload, session) {
       ]
     );
 
+    if (stageChanged) {
+      const notificationRecipients = await collectRequestNotificationRecipientIds(client, requestId, [
+        triageOwnerId,
+        proposalOwnerId,
+        nextOwnerId,
+        requestResult.rows[0].seller_user_id
+      ]);
+      await createStatusChangeNotifications(client, {
+        recipientUserIds: notificationRecipients,
+        actor: {
+          userId: session?.userId || triageOwnerId,
+          name: session?.name || payload.triageOwnerName,
+          email: session?.email || payload.triageOwnerEmail
+        },
+        requestId,
+        proposalRegistryId: requestResult.rows[0].proposalRegistryId || null,
+        fromStageCode: currentStageCode,
+        toStageCode: payload.nextStageCode,
+        requestNumber: requestResult.rows[0].request_number,
+        proposalNumber: requestResult.rows[0].proposalNumber || null,
+        company: payload.clientName || null,
+        note: payload.triageNote || "Triagem atualizada."
+      });
+    }
+
     await logAuditEntry(client, {
       actor: {
         userId: session?.userId || triageOwnerId,
@@ -5218,14 +5493,17 @@ async function saveCommercialRecord(payload, session) {
       requestExists = Boolean(requestExistsResult.rows[0]);
     }
 
-    if (hasValidProposalRegistryId && !requestExists) {
-      await assertProposalRegistryAccessBySession(client, proposalRegistryId, session);
-      const proposalStageResult = await client.query(
-        `SELECT ${buildProposalStageCodeSql("pr")} AS current_stage_code
-         FROM proposal_registry pr
-         WHERE pr.id = $1`,
-        [proposalRegistryId]
-      );
+	    if (hasValidProposalRegistryId && !requestExists) {
+	      await assertProposalRegistryAccessBySession(client, proposalRegistryId, session);
+	      const proposalStageResult = await client.query(
+	        `SELECT
+	           ${buildProposalStageCodeSql("pr")} AS current_stage_code,
+	           pr.proposal_number_display AS "proposalNumber",
+	           pr.client_name AS "clientName"
+	         FROM proposal_registry pr
+	         WHERE pr.id = $1`,
+	        [proposalRegistryId]
+	      );
       const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "em_negociacao";
       assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
       assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
@@ -5283,7 +5561,7 @@ async function saveCommercialRecord(payload, session) {
         actorUserId: sellerUserId
       });
 
-      await logAuditEntry(client, {
+	      await logAuditEntry(client, {
         actor: {
           userId: session?.userId || sellerUserId,
           name: session?.name || payload.sellerName,
@@ -5298,10 +5576,25 @@ async function saveCommercialRecord(payload, session) {
           negotiationStatus: payload.negotiationStatus || null,
           probabilityLevel: payload.probabilityLevel || null
         }
-      });
+	      });
 
-      return { proposalRegistryId };
-    }
+	      await createStatusChangeNotifications(client, {
+	        recipientUserIds: await collectProposalNotificationRecipientIds(client, proposalRegistryId, [sellerUserId]),
+	        actor: {
+	          userId: session?.userId || sellerUserId,
+	          name: session?.name || payload.sellerName,
+	          email: session?.email || payload.sellerEmail
+	        },
+	        proposalRegistryId,
+	        fromStageCode: currentStageCode,
+	        toStageCode: payload.nextStageCode,
+	        proposalNumber: proposalStageResult.rows[0]?.proposalNumber || null,
+	        company: proposalStageResult.rows[0]?.clientName || null,
+	        note: payload.nextAction || payload.acceptedNote || payload.commercialNotes || "Negociacao atualizada."
+	      });
+
+	      return { proposalRegistryId };
+	    }
 
     if (!requestExists) {
       throw new Error("Solicitacao nao encontrada para negociacao.");
@@ -5313,11 +5606,12 @@ async function saveCommercialRecord(payload, session) {
     const lostReasonId = await getReasonId(client, "loss_reasons", payload.lossReason);
     const cancelReasonId = await getReasonId(client, "cancel_reasons", payload.cancelReason);
 
-    const requestResult = await client.query(
-      `SELECT
-         r.current_stage_id,
-         r.current_owner_user_id,
-         ws.code AS current_stage_code,
+	    const requestResult = await client.query(
+	      `SELECT
+	         r.request_number,
+	         r.current_stage_id,
+	         r.current_owner_user_id,
+	         ws.code AS current_stage_code,
          linked_proposal.id AS "proposalRegistryId"
        FROM requests r
        JOIN workflow_stages ws ON ws.id = r.current_stage_id
@@ -5501,6 +5795,22 @@ async function saveCommercialRecord(payload, session) {
           payload.nextAction || payload.acceptedNote || payload.commercialNotes || "Negociacao atualizada."
         ]
       );
+
+      await createStatusChangeNotifications(client, {
+        recipientUserIds: await collectRequestNotificationRecipientIds(client, requestId, [sellerUserId]),
+        actor: {
+          userId: session?.userId || sellerUserId,
+          name: session?.name || payload.sellerName,
+          email: session?.email || payload.sellerEmail
+        },
+        requestId,
+        proposalRegistryId: requestResult.rows[0].proposalRegistryId || null,
+        fromStageCode: currentStageCode,
+        toStageCode: payload.nextStageCode,
+        requestNumber: requestResult.rows[0].request_number,
+        company: payload.clientName || null,
+        note: payload.nextAction || payload.acceptedNote || payload.commercialNotes || "Negociacao atualizada."
+      });
     }
 
     await createNegotiationDiaryEntry(client, payload, session, {
@@ -5551,15 +5861,19 @@ async function saveContractRecord(payload, session) {
 
     const contractOwnerId = await ensureUser(client, payload.contractOwnerName, payload.contractOwnerEmail);
 
-    if (hasValidProposalRegistryId && !hasValidRequestId) {
-      await assertProposalRegistryAccessBySession(client, proposalRegistryId, session);
-      const proposalStageResult = await client.query(
-        `SELECT ${buildProposalStageCodeSql("pr")} AS current_stage_code
-         FROM proposal_registry pr
-         WHERE pr.id = $1`,
-        [proposalRegistryId]
-      );
-      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "elaboracao_de_contrato";
+	    if (hasValidProposalRegistryId && !hasValidRequestId) {
+	      await assertProposalRegistryAccessBySession(client, proposalRegistryId, session);
+	      const proposalStageResult = await client.query(
+	        `SELECT
+	           ${buildProposalStageCodeSql("pr")} AS current_stage_code,
+	           pr.proposal_number_display AS "proposalNumber",
+	           pr.client_name AS "clientName"
+	         FROM proposal_registry pr
+	         WHERE pr.id = $1`,
+	        [proposalRegistryId]
+	      );
+	      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "elaboracao_de_contrato";
+	      const stageChanged = String(currentStageCode) !== String(payload.nextStageCode);
       assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
       assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
       const allowedTransitions = {
@@ -5596,7 +5910,7 @@ async function saveContractRecord(payload, session) {
         ]
       );
 
-      await logAuditEntry(client, {
+	      await logAuditEntry(client, {
         actor: {
           userId: session?.userId || contractOwnerId,
           name: session?.name || payload.contractOwnerName,
@@ -5611,13 +5925,31 @@ async function saveContractRecord(payload, session) {
           nextStageCode: payload.nextStageCode || null,
           draftVersion: payload.draftVersion || null
         }
-      });
+	      });
 
-      return { proposalRegistryId };
-    }
+	      if (stageChanged) {
+	        await createStatusChangeNotifications(client, {
+	          recipientUserIds: await collectProposalNotificationRecipientIds(client, proposalRegistryId, [contractOwnerId]),
+	          actor: {
+	            userId: session?.userId || contractOwnerId,
+	            name: session?.name || payload.contractOwnerName,
+	            email: session?.email || payload.contractOwnerEmail
+	          },
+	          proposalRegistryId,
+	          fromStageCode: currentStageCode,
+	          toStageCode: payload.nextStageCode,
+	          proposalNumber: proposalStageResult.rows[0]?.proposalNumber || null,
+	          company: proposalStageResult.rows[0]?.clientName || null,
+	          note: payload.nextAction || payload.contractNotes || payload.documentPendingNotes || "Contratual atualizado."
+	        });
+	      }
+
+	      return { proposalRegistryId };
+	    }
 
     const requestResult = await client.query(
       `SELECT
+         r.request_number,
          r.current_stage_id,
          ws.code AS current_stage_code,
          linked_proposal.id AS proposal_registry_id,
@@ -5639,10 +5971,12 @@ async function saveContractRecord(payload, session) {
       throw new Error("Solicitacao nao encontrada para contratual.");
     }
 
-    const currentStageId = requestResult.rows[0].current_stage_id;
-    const currentStageCode = requestResult.rows[0].proposal_stage_code || requestResult.rows[0].current_stage_code || "proposta_aceita";
-    const linkedProposalRegistryId = requestResult.rows[0].proposal_registry_id;
-    assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
+	    const currentStageId = requestResult.rows[0].current_stage_id;
+	    const currentStageCode = requestResult.rows[0].proposal_stage_code || requestResult.rows[0].current_stage_code || "proposta_aceita";
+	    const linkedProposalRegistryId = requestResult.rows[0].proposal_registry_id;
+	    const nextStageId = await getStageId(client, payload.nextStageCode);
+	    const stageChanged = String(currentStageCode) !== String(payload.nextStageCode);
+	    assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual do contratual.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
       proposta_aceita: ["elaboracao_de_contrato"],
@@ -5689,7 +6023,7 @@ async function saveContractRecord(payload, session) {
     );
 
     if (existing.rows[0]) {
-      await client.query(
+	    await client.query(
         `UPDATE contract_records
          SET contract_owner_user_id = $2,
              contract_started_at = $3::timestamptz,
@@ -5759,10 +6093,27 @@ async function saveContractRecord(payload, session) {
            status_final = CASE WHEN $4 = 'contrato_assinado' THEN 'Contrato assinado' ELSE status_final END,
            closed_at = CASE WHEN $4 = 'contrato_assinado' THEN NOW() ELSE closed_at END
        WHERE id = $1`,
-      [requestId, currentStageId, contractOwnerId, payload.nextStageCode]
-    );
+	      [requestId, currentStageId, contractOwnerId, payload.nextStageCode]
+	    );
 
-    await logAuditEntry(client, {
+	    if (stageChanged) {
+	      await createStatusChangeNotifications(client, {
+	        recipientUserIds: await collectRequestNotificationRecipientIds(client, requestId, [contractOwnerId]),
+	        actor: {
+	          userId: session?.userId || contractOwnerId,
+	          name: session?.name || payload.contractOwnerName,
+	          email: session?.email || payload.contractOwnerEmail
+	        },
+	        requestId,
+	        proposalRegistryId: linkedProposalRegistryId || null,
+	        fromStageCode: currentStageCode,
+	        toStageCode: payload.nextStageCode,
+	        requestNumber: requestResult.rows[0].request_number,
+	        note: payload.nextAction || payload.contractNotes || payload.documentPendingNotes || "Contratual atualizado."
+	      });
+	    }
+
+	    await logAuditEntry(client, {
       actor: {
         userId: session?.userId || contractOwnerId,
         name: session?.name || payload.contractOwnerName,
@@ -5832,6 +6183,29 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/auth/me") {
       const user = await getCurrentUser(session);
       sendJson(response, 200, { user });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/notifications") {
+      assertAuthenticated(session);
+      const limit = parsePositiveInteger(url.searchParams.get("limit")) || 20;
+      const payload = await listUserNotifications(session.userId, limit);
+      sendJson(response, 200, payload);
+      return;
+    }
+
+    if (request.method === "POST" && /^\/api\/notifications\/\d+\/read$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      const notificationId = Number(url.pathname.split("/")[3]);
+      await markUserNotificationAsRead(notificationId, session.userId);
+      sendJson(response, 200, { message: "Notificacao marcada como lida." });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/notifications/read-all") {
+      assertAuthenticated(session);
+      await markAllUserNotificationsAsRead(session.userId);
+      sendJson(response, 200, { message: "Todas as notificacoes foram marcadas como lidas." });
       return;
     }
 
@@ -6428,6 +6802,7 @@ ensurePasswordColumn()
   .then(() => ensureRequestStructureDeduplication())
   .then(() => ensureAuditLogTable())
   .then(() => ensureNegotiationDiaryTable())
+  .then(() => ensureNotificationTable())
   .then(() => ensureBaseAccessData())
   .then(() => {
     server.listen(PORT, HOST, () => {

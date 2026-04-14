@@ -307,6 +307,11 @@ let adminLookupConfigCache = {
 };
 let adminWorkflowStagesCache = [];
 let activeAdminLookupCategory = "";
+let notificationsCache = [];
+let notificationsUnreadCount = 0;
+let notificationPollTimer = null;
+let notificationToastSeenIds = new Set();
+let notificationsPanelOpen = false;
 let negotiationFiltersState = {
   dateStart: "",
   dateEnd: "",
@@ -2950,6 +2955,123 @@ async function loadJson(url) {
   return response.json();
 }
 
+function renderNotifications(items = notificationsCache) {
+  const list = document.getElementById("notifications-list");
+  const badge = document.getElementById("notifications-badge");
+  if (!list || !badge) return;
+
+  badge.hidden = notificationsUnreadCount <= 0;
+  badge.textContent = String(notificationsUnreadCount);
+
+  if (!items.length) {
+    list.innerHTML = `<div class="notification-empty muted">Nenhuma notificação ainda.</div>`;
+    return;
+  }
+
+  list.innerHTML = items.map((item) => `
+    <button
+      type="button"
+      class="notification-item ${item.isRead ? "" : "unread"}"
+      data-notification-id="${item.id}"
+      data-request-id="${item.requestId || ""}"
+      data-proposal-id="${item.proposalRegistryId || ""}"
+      data-stage-code="${escapeHtml(item.toStageCode || "")}"
+    >
+      <strong>${escapeHtml(item.title || "Atualizacao de status")}</strong>
+      <div class="notification-item-meta">
+        <span>${escapeHtml(item.createdAtLabel || "-")}</span>
+        <span class="pill ${item.isRead ? "info" : "ok"}">${item.isRead ? "Lida" : "Nova"}</span>
+      </div>
+      <div class="notification-item-message">${escapeHtml(item.message || "")}</div>
+    </button>
+  `).join("");
+}
+
+function setNotificationsPanelOpen(isOpen) {
+  notificationsPanelOpen = Boolean(isOpen);
+  const panel = document.getElementById("notifications-panel");
+  if (!panel) return;
+  panel.hidden = !notificationsPanelOpen;
+}
+
+function showNotificationToast(item) {
+  const stack = document.getElementById("notification-toast-stack");
+  if (!stack || !item?.id) return;
+  const toast = document.createElement("div");
+  toast.className = "notification-toast";
+  toast.innerHTML = `
+    <strong>${escapeHtml(item.title || "Atualizacao de status")}</strong>
+    <p>${escapeHtml(item.message || "")}</p>
+  `;
+  stack.appendChild(toast);
+  window.setTimeout(() => {
+    toast.remove();
+  }, 6000);
+}
+
+async function loadNotifications({ silent = false } = {}) {
+  if (!authToken) return;
+  const payload = await loadJson("/api/notifications?limit=12");
+  const previousIds = new Set(notificationsCache.map((item) => String(item.id)));
+  notificationsCache = payload.items || [];
+  notificationsUnreadCount = Number(payload.unreadCount || 0);
+  renderNotifications(notificationsCache);
+
+  if (silent) {
+    notificationsCache
+      .filter((item) => !item.isRead && !previousIds.has(String(item.id)) && !notificationToastSeenIds.has(String(item.id)))
+      .forEach((item) => {
+        notificationToastSeenIds.add(String(item.id));
+        showNotificationToast(item);
+      });
+  } else {
+    notificationsCache.forEach((item) => notificationToastSeenIds.add(String(item.id)));
+  }
+}
+
+function startNotificationsPolling() {
+  if (notificationPollTimer) {
+    window.clearInterval(notificationPollTimer);
+  }
+  notificationPollTimer = window.setInterval(() => {
+    loadNotifications({ silent: true }).catch((error) => {
+      console.warn("Nao foi possivel atualizar as notificacoes.", error);
+    });
+  }, 30000);
+}
+
+function stopNotificationsPolling() {
+  if (notificationPollTimer) {
+    window.clearInterval(notificationPollTimer);
+    notificationPollTimer = null;
+  }
+}
+
+async function markNotificationAsRead(notificationId) {
+  const response = await fetchWithSession(`/api/notifications/${notificationId}/read`, { method: "POST" });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Falha ao marcar notificacao.");
+  }
+  const item = notificationsCache.find((entry) => String(entry.id) === String(notificationId));
+  if (item && !item.isRead) {
+    item.isRead = true;
+    notificationsUnreadCount = Math.max(0, notificationsUnreadCount - 1);
+    renderNotifications(notificationsCache);
+  }
+}
+
+async function markAllNotificationsAsRead() {
+  const response = await fetchWithSession("/api/notifications/read-all", { method: "POST" });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Falha ao marcar notificacoes.");
+  }
+  notificationsCache = notificationsCache.map((item) => ({ ...item, isRead: true }));
+  notificationsUnreadCount = 0;
+  renderNotifications(notificationsCache);
+}
+
 async function loadRequestAttachments(requestId) {
   return loadJson(`/api/requests/${requestId}/attachments`);
 }
@@ -2975,12 +3097,18 @@ async function autofillAddressFromZipCode() {
 }
 
 function showLoginScreen() {
+  stopNotificationsPolling();
   forcePasswordChange = false;
+  notificationsCache = [];
+  notificationsUnreadCount = 0;
+  notificationToastSeenIds = new Set();
+  setNotificationsPanelOpen(false);
   document.getElementById("login-screen").hidden = false;
   document.getElementById("login-screen").style.display = "grid";
   document.getElementById("app-shell").hidden = true;
   document.getElementById("app-shell").classList.add("app-hidden");
   document.getElementById("login-feedback").textContent = "";
+  renderNotifications([]);
 }
 
 function showAppShell() {
@@ -3056,14 +3184,15 @@ async function loadAdminModule() {
 }
 
 async function loadAuthenticatedAppData() {
-  const [authMe, dashboard, requests, reportItems, proposalNumbers, crmProposalRequests, lookups] = await Promise.all([
+  const [authMe, dashboard, requests, reportItems, proposalNumbers, crmProposalRequests, lookups, notifications] = await Promise.all([
     loadJson("/api/auth/me"),
     loadJson("/api/dashboard"),
     loadJson("/api/requests"),
     loadJson("/api/reports"),
     loadJson("/api/proposal-numbers"),
     loadJson("/api/proposal-numbers/crm-requests"),
-    loadJson("/api/lookups")
+    loadJson("/api/lookups"),
+    loadJson("/api/notifications?limit=12")
   ]);
 
   applyLookups(lookups);
@@ -3080,6 +3209,9 @@ async function loadAuthenticatedAppData() {
   proposalNumberRowsCache = proposalNumbers;
   proposalNumberAllRowsCache = proposalNumbers;
   crmProposalRequestsCache = crmProposalRequests;
+  notificationsCache = notifications.items || [];
+  notificationsUnreadCount = Number(notifications.unreadCount || 0);
+  notificationToastSeenIds = new Set(notificationsCache.map((item) => String(item.id)));
   selectedRequestId = requests[0]?.id || null;
   updateRequestDeleteButton(selectedRequestId);
 
@@ -3093,6 +3225,7 @@ async function loadAuthenticatedAppData() {
   renderProposalNumberMetrics(proposalNumbers, proposalNumbers);
   renderCrmProposalRequests(crmProposalRequests);
   renderAllStageBoards(reportItems);
+  renderNotifications(notificationsCache);
   renderDetail(initialDetail);
   renderHistory(initialDetail.history || []);
   renderAttachmentList("proposal-attachments", initialAttachments, ["anexo_inicial", "documento_tecnico_cliente"]);
@@ -3107,6 +3240,7 @@ async function loadAuthenticatedAppData() {
   await loadAdminModule();
   setActiveView("dashboard");
   showAppShell();
+  startNotificationsPolling();
 }
 
 async function reloadApplicationLookups() {
@@ -3145,6 +3279,72 @@ async function bootstrap() {
       showLoginScreen();
     }
   }
+
+  document.getElementById("notifications-toggle").addEventListener("click", async (event) => {
+    event.stopPropagation();
+    const nextState = !notificationsPanelOpen;
+    setNotificationsPanelOpen(nextState);
+    if (nextState && authToken) {
+      try {
+        await loadNotifications();
+      } catch (error) {
+        console.warn("Nao foi possivel carregar as notificacoes.", error);
+      }
+    }
+  });
+
+  document.getElementById("notifications-mark-all").addEventListener("click", async (event) => {
+    event.stopPropagation();
+    try {
+      await markAllNotificationsAsRead();
+    } catch (error) {
+      alert(`Nao foi possivel marcar as notificacoes: ${error.message}`);
+    }
+  });
+
+  document.addEventListener("click", async (event) => {
+    const notificationItem = event.target.closest(".notification-item");
+    const notificationsPanel = document.getElementById("notifications-panel");
+    const notificationsShell = document.querySelector(".notifications-shell");
+
+    if (notificationItem) {
+      try {
+        await markNotificationAsRead(notificationItem.dataset.notificationId);
+      } catch (error) {
+        console.warn("Nao foi possivel marcar a notificacao como lida.", error);
+      }
+
+      setNotificationsPanelOpen(false);
+
+      try {
+        if (notificationItem.dataset.requestId) {
+          const detail = await selectRequest(notificationItem.dataset.requestId);
+          setActiveView(preferredWorkflowView(detail, workflowViewFromStage(notificationItem.dataset.stageCode || detail.stageCode, "solicitacoes")));
+          return;
+        }
+
+        if (notificationItem.dataset.proposalId) {
+          const detail = await loadProposalNumberDetail(notificationItem.dataset.proposalId);
+          renderProposalOnlyContext(detail);
+          const targetView = workflowViewFromStage(notificationItem.dataset.stageCode || detail.stageCode, "negociacoes");
+          if (targetView === "contratos") {
+            populateContractForm(detail);
+          } else {
+            populateCommercialForm(detail);
+          }
+          setActiveView(targetView);
+          scrollToWorkflowForm(targetView);
+        }
+      } catch (error) {
+        alert(`Nao foi possivel abrir a notificacao: ${error.message}`);
+      }
+      return;
+    }
+
+    if (notificationsPanelOpen && notificationsShell && !notificationsShell.contains(event.target) && notificationsPanel && !notificationsPanel.contains(event.target)) {
+      setNotificationsPanelOpen(false);
+    }
+  });
 
     document.getElementById("requests-table").addEventListener("click", async (event) => {
       const row = event.target.closest(".request-row");

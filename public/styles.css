@@ -295,6 +295,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+  position: relative;
 }
 
 .topbar h1 {
@@ -305,6 +306,141 @@ body {
 
 .topbar p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.topbar-actions {
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.notifications-shell {
+  position: relative;
+}
+
+.notification-button {
+  position: relative;
+  min-width: 146px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.notification-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.notifications-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  z-index: 30;
+}
+
+.notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.notifications-mark-all {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.notifications-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-item {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+}
+
+.notification-item.unread {
+  border-color: rgba(15, 118, 110, 0.35);
+  background: rgba(217, 242, 239, 0.35);
+}
+
+.notification-item strong {
+  font-size: 13px;
+}
+
+.notification-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.notification-item-message {
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.notification-empty {
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.notification-toast-stack {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 80;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.notification-toast {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  background: rgba(255, 253, 249, 0.98);
+  box-shadow: var(--shadow);
+}
+
+.notification-toast strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.notification-toast p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+}
 
 button {
   border: 0;

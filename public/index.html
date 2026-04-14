@@ -92,7 +92,22 @@
           <h1 id="page-title">Dashboard</h1>
           <p id="page-subtitle">Painel operacional do funil de propostas com workflow, SLA e anexos.</p>
         </div>
-        <div class="button-row">
+        <div class="button-row topbar-actions">
+          <div class="notifications-shell">
+            <button class="secondary notification-button" id="notifications-toggle" type="button">
+              <span>Notificações</span>
+              <span class="notification-badge" id="notifications-badge" hidden>0</span>
+            </button>
+            <div class="notifications-panel" id="notifications-panel" hidden>
+              <div class="notifications-header">
+                <strong>Atualizações de status</strong>
+                <button type="button" class="secondary notifications-mark-all" id="notifications-mark-all">Marcar todas como lidas</button>
+              </div>
+              <div class="notifications-list" id="notifications-list">
+                <div class="muted">Nenhuma notificação ainda.</div>
+              </div>
+            </div>
+          </div>
           <button class="secondary" id="top-export-report">Exportar Excel</button>
           <button class="primary" id="go-to-request-form">Nova solicitação</button>
         </div>
@@ -1751,6 +1766,7 @@
     </main>
   </div>
 
+  <div id="notification-toast-stack" class="notification-toast-stack" aria-live="polite"></div>
   <script src="/app.js"></script>
 </body>
 </html>
