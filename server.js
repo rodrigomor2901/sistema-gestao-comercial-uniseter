@@ -1677,6 +1677,13 @@ function composeNegotiationDiaryNote(entry) {
   return parts.join(" | ");
 }
 
+function buildHistoryActorLabel(actorName, actorEmail) {
+  const name = String(actorName || "").trim();
+  const email = String(actorEmail || "").trim();
+  if (name && email) return `${name} (${email})`;
+  return name || email || "Sistema";
+}
+
 async function createNegotiationDiaryEntry(client, payload, session, context = {}) {
   const summary = String(payload.negotiationSummary || "").trim();
   if (!summary) return;
@@ -1695,7 +1702,7 @@ async function createNegotiationDiaryEntry(client, payload, session, context = {
       commercial_notes,
       requested_adjustments
     ) VALUES (
-      $1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()), $7, $8, $9, $10, $11
+      $1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10
     )`,
     [
       context.requestId || null,
@@ -1703,7 +1710,6 @@ async function createNegotiationDiaryEntry(client, payload, session, context = {
       session?.userId || context.actorUserId || null,
       session?.name || payload.sellerName || null,
       session?.email || payload.sellerEmail || null,
-      payload.lastContactAt || null,
       summary,
       payload.nextAction || null,
       payload.probabilityLevel || null,
@@ -3502,8 +3508,9 @@ async function getProposalNumberDetail(proposalId, session) {
   const negotiationDiaryEntries = await listNegotiationDiaryEntries({ proposalRegistryId: proposalId });
   detail.history = negotiationDiaryEntries.map((entry) => ({
     title: "Diario de negociacao",
-    meta: `${entry.contactDateLabel} - ${entry.actorName || entry.actorEmail || "Sistema"}`,
-    note: composeNegotiationDiaryNote(entry)
+    meta: `${entry.contactDateLabel} - ${buildHistoryActorLabel(entry.actorName, entry.actorEmail)}`,
+    note: composeNegotiationDiaryNote(entry),
+    type: "negotiation"
   }));
   return detail;
 }
@@ -4375,7 +4382,7 @@ async function getRequestDetailFromDb(requestId, session) {
       type: "stage"
     })), ...negotiationDiaryEntries.map((entry) => ({
       title: "Diario de negociacao",
-      meta: `${entry.contactDateLabel} - ${entry.actorName || entry.actorEmail || "Sistema"}`,
+      meta: `${entry.contactDateLabel} - ${buildHistoryActorLabel(entry.actorName, entry.actorEmail)}`,
       note: composeNegotiationDiaryNote(entry),
       sortAt: entry.contactDate,
       type: "negotiation"
@@ -5346,10 +5353,12 @@ async function saveCommercialRecord(payload, session) {
       );
     }
 
+    const stageChanged = Number(nextStageId) !== Number(currentStageId);
+
     await client.query(
       `UPDATE requests
-       SET current_stage_id = $2,
-           current_owner_user_id = $3,
+       SET current_stage_id = CASE WHEN $7 THEN $2 ELSE current_stage_id END,
+           current_owner_user_id = CASE WHEN $7 THEN $3 ELSE current_owner_user_id END,
            updated_at = NOW(),
            lost_reason_id = CASE WHEN $4 = 'perdida' THEN $5 ELSE lost_reason_id END,
            cancel_reason_id = CASE WHEN $4 = 'cancelada' THEN $6 ELSE cancel_reason_id END,
@@ -5363,25 +5372,27 @@ async function saveCommercialRecord(payload, session) {
              ELSE closed_at
            END
        WHERE id = $1`,
-      [requestId, nextStageId, sellerUserId, payload.nextStageCode, lostReasonId, cancelReasonId]
+      [requestId, nextStageId, sellerUserId, payload.nextStageCode, lostReasonId, cancelReasonId, stageChanged]
     );
 
-    await client.query(
-      `INSERT INTO request_stage_history (
-        request_id, from_stage_id, to_stage_id, changed_by_user_id,
-        owner_user_id, entered_at, sla_deadline_at, sla_status, note
-      )
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), $6, $7)`,
-      [
-        requestId,
-        currentStageId,
-        nextStageId,
-        sellerUserId,
-        sellerUserId,
-        "ok",
-        payload.nextAction || payload.acceptedNote || payload.commercialNotes || "Negociacao atualizada."
-      ]
-    );
+    if (stageChanged) {
+      await client.query(
+        `INSERT INTO request_stage_history (
+          request_id, from_stage_id, to_stage_id, changed_by_user_id,
+          owner_user_id, entered_at, sla_deadline_at, sla_status, note
+        )
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), $6, $7)`,
+        [
+          requestId,
+          currentStageId,
+          nextStageId,
+          sellerUserId,
+          sellerUserId,
+          "ok",
+          payload.nextAction || payload.acceptedNote || payload.commercialNotes || "Negociacao atualizada."
+        ]
+      );
+    }
 
     await createNegotiationDiaryEntry(client, payload, session, {
       requestId,

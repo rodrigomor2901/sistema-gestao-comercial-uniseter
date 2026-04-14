@@ -1622,7 +1622,7 @@ function renderProposalOnlyContext(detail) {
       title: "Proposta Ganha",
       meta: `${formatIsoDateToBr(detail.commercialAcceptedAt)} - ${detail.manager || detail.seller || "Sistema"}`,
       note: detail.commercialAcceptedNote || detail.commercialAcceptedScope || "Aceite comercial registrado.",
-      type: "negotiation"
+      type: "stage"
     });
   }
 
