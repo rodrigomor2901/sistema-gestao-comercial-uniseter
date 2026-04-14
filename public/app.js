@@ -1550,14 +1550,24 @@ function renderDetail(item) {
 }
 
 function renderHistory(items) {
-  const container = document.getElementById("history");
-  container.innerHTML = items.map((item) => `
+  const negotiationContainer = document.getElementById("history-negotiations");
+  const stageContainer = document.getElementById("history-stages");
+  if (!negotiationContainer || !stageContainer) return;
+
+  const negotiationItems = items.filter((item) => item.type === "negotiation");
+  const stageItems = items.filter((item) => item.type !== "negotiation");
+  const renderItems = (entries, emptyMessage) => entries.length
+    ? entries.map((item) => `
     <div class="event">
       <strong>${item.title}</strong>
       <div class="muted">${item.meta}</div>
       <div class="muted">${item.note}</div>
     </div>
-  `).join("");
+  `).join("")
+    : `<div class="event empty-history">${emptyMessage}</div>`;
+
+  negotiationContainer.innerHTML = renderItems(negotiationItems, "Nenhuma atualização de negociação registrada ainda.");
+  stageContainer.innerHTML = renderItems(stageItems, "Nenhuma atualização de etapa registrada ainda.");
 }
 
 function formatIsoDateToBr(value) {
@@ -1602,7 +1612,8 @@ function renderProposalOnlyContext(detail) {
         {
           title: detail.stage || "Negócio histórico",
           meta: `${detail.issueDate || "-"} - ${detail.manager || detail.seller || "Sistema"}`,
-          note: detail.notes || "Registro importado para acompanhamento comercial."
+          note: detail.notes || "Registro importado para acompanhamento comercial.",
+          type: "stage"
         }
       ];
 
@@ -1610,7 +1621,8 @@ function renderProposalOnlyContext(detail) {
     history.unshift({
       title: "Proposta Ganha",
       meta: `${formatIsoDateToBr(detail.commercialAcceptedAt)} - ${detail.manager || detail.seller || "Sistema"}`,
-      note: detail.commercialAcceptedNote || detail.commercialAcceptedScope || "Aceite comercial registrado."
+      note: detail.commercialAcceptedNote || detail.commercialAcceptedScope || "Aceite comercial registrado.",
+      type: "negotiation"
     });
   }
 
@@ -1618,7 +1630,8 @@ function renderProposalOnlyContext(detail) {
     history.unshift({
       title: "Andamento contratual",
       meta: `${formatIsoDateToBr(detail.contractStartedAt)} - ${detail.manager || detail.seller || "Sistema"}`,
-      note: detail.draftVersion || detail.documentPendingNotes || "Contrato em andamento."
+      note: detail.draftVersion || detail.documentPendingNotes || "Contrato em andamento.",
+      type: "stage"
     });
   }
 

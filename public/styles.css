@@ -374,6 +374,35 @@ button {
 .section-head span, .muted { color: var(--muted); font-size: 12px; }
 
 .funnel, .list, .timeline { display: grid; gap: 10px; }
+.history-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.history-section {
+  display: grid;
+  gap: 10px;
+}
+
+.history-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee5d9;
+}
+
+.history-section-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.empty-history {
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .funnel-row { display: grid; grid-template-columns: 140px 1fr 42px; gap: 10px; align-items: center; font-size: 12px; }
 .bar { height: 10px; border-radius: 999px; background: #efe8dc; overflow: hidden; }
 .bar > div { height: 100%; background: linear-gradient(90deg, var(--brand), #14b8a6); }

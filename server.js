@@ -4371,18 +4371,21 @@ async function getRequestDetailFromDb(requestId, session) {
       title: row.title,
       meta: row.meta,
       note: row.note,
-      sortAt: row.sortAt
+      sortAt: row.sortAt,
+      type: "stage"
     })), ...negotiationDiaryEntries.map((entry) => ({
       title: "Diario de negociacao",
       meta: `${entry.contactDateLabel} - ${entry.actorName || entry.actorEmail || "Sistema"}`,
       note: composeNegotiationDiaryNote(entry),
-      sortAt: entry.contactDate
+      sortAt: entry.contactDate,
+      type: "negotiation"
     }))]
       .sort((left, right) => new Date(right.sortAt).getTime() - new Date(left.sortAt).getTime())
       .map((row) => ({
         title: row.title,
         meta: row.meta,
-        note: row.note
+        note: row.note,
+        type: row.type || "stage"
       }))
   };
 }
