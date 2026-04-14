@@ -1680,7 +1680,6 @@ function composeNegotiationDiaryNote(entry) {
 function buildHistoryActorLabel(actorName, actorEmail) {
   const name = String(actorName || "").trim();
   const email = String(actorEmail || "").trim();
-  if (name && email) return `${name} (${email})`;
   return name || email || "Sistema";
 }
 
