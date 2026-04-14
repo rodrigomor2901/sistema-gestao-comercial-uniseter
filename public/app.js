@@ -30,6 +30,34 @@ function normalizeServiceLabel(value) {
   return text;
 }
 
+const APP_TIMEZONE = "America/Sao_Paulo";
+
+function getSaoPauloNow() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: APP_TIMEZONE }));
+}
+
+function getSaoPauloIsoDate() {
+  const now = getSaoPauloNow();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateTimeToBr(value) {
+  if (!value) return "-";
+  const ref = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(ref.getTime())) return String(value);
+  return ref.toLocaleString("pt-BR", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function generateRequestSubmissionKey() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -684,7 +712,11 @@ function formatCurrency(value) {
 
 function renderProposalNumberMetrics(allItems, filteredItems) {
   const container = document.getElementById("proposal-number-metrics");
-  const currentMonth = new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
+  const currentMonth = getSaoPauloNow().toLocaleDateString("pt-BR", {
+    timeZone: APP_TIMEZONE,
+    month: "2-digit",
+    year: "numeric"
+  });
   const currentMonthCount = allItems.filter((item) => String(item.issueDate || "").slice(3) === currentMonth).length;
   const totalValue = allItems.reduce((sum, item) => sum + Number(item.proposalValueRaw || 0), 0);
   const filteredValue = filteredItems.reduce((sum, item) => sum + Number(item.proposalValueRaw || 0), 0);
@@ -759,7 +791,11 @@ function renderProposalNumberMetrics(allItems, filteredItems) {
   const container = document.getElementById("proposal-number-metrics");
   const proposalAllItems = allItems.filter((item) => item.sourceType !== "request");
   const proposalFilteredItems = filteredItems.filter((item) => item.sourceType !== "request");
-  const currentMonth = new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
+  const currentMonth = getSaoPauloNow().toLocaleDateString("pt-BR", {
+    timeZone: APP_TIMEZONE,
+    month: "2-digit",
+    year: "numeric"
+  });
   const currentMonthCount = proposalAllItems.filter((item) => String(item.issueDate || "").slice(3) === currentMonth).length;
   const totalValue = proposalAllItems.reduce((sum, item) => sum + Number(item.proposalValueRaw || 0), 0);
   const filteredValue = proposalFilteredItems.reduce((sum, item) => sum + Number(item.proposalValueRaw || 0), 0);
@@ -1040,7 +1076,7 @@ function renderAuditLogs(items) {
 
   container.innerHTML = items.map((item) => `
     <tr>
-      <td>${new Date(item.createdAt).toLocaleString("pt-BR")}</td>
+      <td>${formatDateTimeToBr(item.createdAt)}</td>
       <td>${item.actorName}${item.actorRole ? `<div class="muted">${roleLabel(item.actorRole)}</div>` : ""}</td>
       <td>${item.actionType}</td>
       <td>${item.entityType}${item.entityId ? ` #${item.entityId}` : ""}</td>
@@ -1411,7 +1447,7 @@ function applyRoleAccess(roleKey) {
 }
 
 function syncProposalNumberForm() {
-  document.getElementById("proposal-number-issue-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("proposal-number-issue-date").value = getSaoPauloIsoDate();
   document.getElementById("proposal-number-manager-name").value = currentUser.name || "";
   if (!document.getElementById("proposal-number-branch-name").value && lookupsCache.branches?.length) {
     document.getElementById("proposal-number-branch-name").value = lookupsCache.branches[0];
@@ -2611,11 +2647,11 @@ function validateProposalNumberPayload(payload) {
 }
 
 function syncLoggedUserIntoForms() {
-  document.getElementById("request-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("request-date").value = getSaoPauloIsoDate();
   document.getElementById("seller-name").value = currentUser.name;
   document.getElementById("seller-email").value = currentUser.email;
   document.getElementById("proposal-number-manager-name").value = currentUser.name;
-  document.getElementById("proposal-number-issue-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("proposal-number-issue-date").value = getSaoPauloIsoDate();
   document.getElementById("commercial-seller-name").value = currentUser.name;
   document.getElementById("commercial-seller-email").value = currentUser.email;
   document.getElementById("triage-owner-name").value = currentUser.name;

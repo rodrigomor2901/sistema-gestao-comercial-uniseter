@@ -26,6 +26,12 @@ const pool = new Pool(
       }
 );
 
+pool.on("connect", (client) => {
+  client.query("SET TIME ZONE 'America/Sao_Paulo'").catch((error) => {
+    console.error("Nao foi possivel definir o timezone da conexao PostgreSQL.", error);
+  });
+});
+
 async function query(text, params) {
   return pool.query(text, params);
 }

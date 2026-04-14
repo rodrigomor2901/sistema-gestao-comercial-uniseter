@@ -15,6 +15,7 @@ const UPLOADS_DIR = process.env.APP_UPLOADS_DIR
   ? path.resolve(process.env.APP_UPLOADS_DIR)
   : path.join(__dirname, "uploads");
 const sessions = new Map();
+const APP_TIMEZONE = "America/Sao_Paulo";
 const BRANCH_OPTIONS = ["Matriz - Campinas", "Filial Minas"];
 const RESPONSIBLE_OPTIONS = ["ANDRE", "LANA", "RODRIGO", "GUILHERME", "KLEYTON", "MACCARI", "SUPERVISAO", "COORDENACAO"];
 const LEAD_SOURCE_OPTIONS = ["Prospeccao", "Indicacao Diretoria", "Indicacao Seter", "Cliente Ativo", "Campseg", "Marcondes"];
@@ -954,8 +955,24 @@ async function assertProposalRegistryAccessBySession(client, proposalRegistryId,
 }
 
 function formatProposalNumberDisplay(sequence, issueDate) {
-  const year = issueDate ? new Date(issueDate).getFullYear() : new Date().getFullYear();
+  const year = issueDate
+    ? Number(String(issueDate).slice(0, 4))
+    : Number(
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: APP_TIMEZONE,
+          year: "numeric"
+        }).format(new Date())
+      );
   return `${sequence}/${year}`;
+}
+
+function getSaoPauloIsoDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
 }
 
 function buildProposalStageCodeSql(alias = "pr") {
@@ -1026,7 +1043,7 @@ function buildRequestOverviewQuery() {
       ws.code AS "stageCode",
       ${slaStatusCase} AS "slaStatus",
       COALESCE(owner_user.name, seller_user.name) AS "currentOwner",
-      TO_CHAR(r.updated_at, 'DD/MM/YYYY HH24:MI') AS "updatedAt",
+      TO_CHAR(r.updated_at AT TIME ZONE '${APP_TIMEZONE}', 'DD/MM/YYYY HH24:MI') AS "updatedAt",
       latest.entered_at AS "stageEnteredAt",
       latest.note AS "latestHistoryNote"
     FROM requests r
@@ -1720,7 +1737,7 @@ async function listNegotiationDiaryEntries(filters = {}) {
        actor_name AS "actorName",
        actor_email AS "actorEmail",
        contact_date AS "contactDate",
-       TO_CHAR(contact_date, 'DD/MM/YYYY HH24:MI') AS "contactDateLabel",
+       TO_CHAR(contact_date AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS "contactDateLabel",
        summary,
        next_action AS "nextAction",
        probability_level AS "probabilityLevel",
@@ -3273,7 +3290,7 @@ async function saveProposalRegistryServiceLines(client, proposalRegistryId, serv
 
 async function createProposalNumber(payload, session) {
   return withTransaction(async (client) => {
-    const issueDate = payload.issueDate || new Date().toISOString().slice(0, 10);
+    const issueDate = payload.issueDate || getSaoPauloIsoDate();
     const requestId = payload.requestId ? Number(payload.requestId) : null;
     const totals = deriveProposalTotals(payload);
     if (!payload.clientName && !requestId) {
@@ -4235,7 +4252,7 @@ async function getRequestDetailFromDb(requestId, session) {
     `SELECT
        ws.name AS title,
        rsh.entered_at AS "sortAt",
-       TO_CHAR(rsh.entered_at, 'DD/MM/YYYY HH24:MI') || ' - ' || COALESCE(changed_user.name, 'Sistema') AS meta,
+       TO_CHAR(rsh.entered_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') || ' - ' || COALESCE(changed_user.name, 'Sistema') AS meta,
        COALESCE(rsh.note, 'Sem observacao registrada.') AS note
      FROM request_stage_history rsh
      JOIN workflow_stages ws ON ws.id = rsh.to_stage_id
@@ -4807,7 +4824,7 @@ async function listRequestAttachments(requestId) {
        mime_type AS "mimeType",
        storage_path AS "storagePath",
        description,
-       TO_CHAR(created_at, 'DD/MM/YYYY HH24:MI') AS "createdAt"
+       TO_CHAR(created_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS "createdAt"
      FROM attachments
      WHERE request_id = $1
      ORDER BY created_at DESC, id DESC`,
