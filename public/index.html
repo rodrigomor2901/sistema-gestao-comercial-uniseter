@@ -1447,13 +1447,22 @@
                 <textarea id="operational-assumptions" name="operationalAssumptions"></textarea>
               </div>
               <div class="control control-span-2">
-                <label for="proposal-final-pdf">PDF da proposta</label>
-                <input id="proposal-final-pdf" name="proposalFinalPdf" type="file" accept=".pdf" />
+                <label for="proposal-final-pdf">Arquivos da proposta final</label>
+                <input id="proposal-final-pdf" name="proposalFinalPdf" type="file" multiple accept=".pdf" />
+                <small class="control-help">Permite anexar uma ou mais propostas finais em PDF.</small>
+              </div>
+              <div class="control control-span-2">
+                <label for="proposal-open-sheet">Planilha aberta</label>
+                <input id="proposal-open-sheet" name="proposalOpenSpreadsheet" type="file" accept=".xlsx,.xls,.csv" />
+              </div>
+              <div class="control control-span-2">
+                <label for="proposal-technical-file">Proposta técnica</label>
+                <input id="proposal-technical-file" name="proposalTechnicalFile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" />
               </div>
               <div class="control control-span-2">
                 <label for="proposal-supporting-files">Arquivos complementares da proposta</label>
                 <input id="proposal-supporting-files" name="proposalSupportingFiles" type="file" multiple accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.ppt,.pptx" />
-                <small class="control-help">Use para planilha aberta, proposta técnica e outros arquivos de apoio antes de enviar para Recebimento de Proposta.</small>
+                <small class="control-help">Use para anexos extras de apoio antes de enviar para Recebimento de Proposta.</small>
               </div>
             </div>
           </div>
@@ -1574,6 +1583,7 @@
                 <label for="commercial-next-stage-code">Mover para etapa</label>
                 <select id="commercial-next-stage-code" name="nextStageCode">
                   <option value=""></option>
+                  <option value="em_triagem">Devolver para triagem</option>
                   <option value="enviada_ao_vendedor">Recebimento de Proposta</option>
                   <option value="em_negociacao">Em negociacao</option>
                   <option value="proposta_aceita">Proposta Ganha</option>
@@ -1661,6 +1671,14 @@
         </div>
 
         <form id="contract-form" class="form-layout">
+          <div class="form-block">
+            <div class="section-head">
+              <h3>Arquivos contratuais</h3>
+              <span>Minutas e contrato anexados nesta proposta</span>
+            </div>
+            <div id="contract-attachments" class="attachment-list empty-state">Nenhum arquivo disponivel.</div>
+          </div>
+
           <div class="form-block">
             <h3>Solicitacao vinculada</h3>
             <div class="form-grid">

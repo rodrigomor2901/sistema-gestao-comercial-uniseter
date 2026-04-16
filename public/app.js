@@ -322,6 +322,10 @@ let proposalNumberRowsCache = [];
 let proposalNumberAllRowsCache = [];
 let crmProposalRequestsCache = [];
 let requestSaveInFlight = false;
+let proposalNumberSaveInFlight = false;
+let proposalSaveInFlight = false;
+let commercialSaveInFlight = false;
+let contractSaveInFlight = false;
 let lookupsCache = {
   branches: [],
   responsibles: [],
@@ -656,8 +660,8 @@ function buildNegotiationRows(baseRows = []) {
       proposalRegistryId: item.id,
       company: item.clientName || "-",
       seller: item.manager || "-",
-      currentStage: item.stageLabel || "Em negociacao",
-      stageCode: item.stageCode || "em_negociacao",
+      currentStage: item.commercialStageLabel || item.stageLabel || "Em negociacao",
+      stageCode: item.commercialStageCode || item.stageCode || "em_negociacao",
       slaStatus: "Sem SLA",
       currentOwner: item.manager || "-",
       updatedAt: item.issueDate || "-",
@@ -1366,7 +1370,8 @@ async function deleteRequestAndRefresh(requestId) {
       renderDetail(requestDetailFallback());
       renderHistory([]);
       renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
-      renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
+      renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+      renderAttachmentList("contract-attachments", [], ["minuta_inicial", "contrato_assinado"]);
       populateProposalForm(requestDetailFallback());
       populateCommercialForm(requestDetailFallback());
       populateContractForm(requestDetailFallback());
@@ -1813,11 +1818,17 @@ function renderProposalRequestSummary(detail) {
     return parts.join(" | ");
   });
   const operationSummary = buildServiceOperationSummary(detail.posts || [], detail.equipments || []);
+  const requestContext = [
+    detail.initialNote ? `Solicitacao inicial: ${detail.initialNote}` : null,
+    detail.generalNotes ? `Observacoes gerais: ${detail.generalNotes}` : null,
+    detail.technicalDocNotes ? `Documento tecnico: ${detail.technicalDocNotes}` : null
+  ].filter(Boolean);
 
   container.innerHTML = [
     renderSummaryCard("Tipos de servico", normalizedServices),
     renderSummaryCard("Beneficios", benefits),
-    renderSummaryCard("Operacao por servico", operationSummary)
+    renderSummaryCard("Operacao por servico", operationSummary),
+    renderSummaryCard("Contexto da solicitacao", requestContext)
   ].join("");
 }
 
@@ -1908,7 +1919,7 @@ function populateCommercialForm(detail) {
   document.getElementById("commercial-request-number").value = detail.requestNumber || "-";
   document.getElementById("commercial-proposal-number").value = detail.proposalNumber || "-";
   document.getElementById("commercial-request-company").value = detail.company || detail.clientName || "";
-  document.getElementById("commercial-request-stage").value = detail.stage || detail.stageLabel || "";
+  document.getElementById("commercial-request-stage").value = detail.proposalCommercialStageLabel || detail.commercialStageLabel || detail.stage || detail.stageLabel || "";
   document.getElementById("commercial-seller-name").value = detail.commercialSellerName || detail.seller || detail.manager || currentUser.name || "";
   document.getElementById("commercial-seller-email").value = detail.commercialSellerEmail || detail.sellerEmail || currentUser.email || "";
   document.getElementById("sent-to-seller-at").value = detail.commercialSentToSellerAt || detail.sentToSellerAt || "";
@@ -1929,6 +1940,7 @@ function populateCommercialForm(detail) {
   document.getElementById("accepted-conditions").value = detail.commercialAcceptedConditions || "";
   document.getElementById("accepted-note").value = detail.commercialAcceptedNote || "";
   document.getElementById("commercial-next-stage-code").value = "";
+  setFormSubmitState("commercial-form", false);
 }
 
 function populateContractForm(detail) {
@@ -1936,21 +1948,21 @@ function populateContractForm(detail) {
   document.getElementById("contract-proposal-registry-id").value = detail.proposalRegistryId || "";
   document.getElementById("contract-request-number").value = detail.requestNumber || "-";
   document.getElementById("contract-request-company").value = detail.company || detail.clientName || "";
-  document.getElementById("contract-request-stage").value = detail.stage || detail.stageLabel || "";
+  document.getElementById("contract-request-stage").value = detail.proposalWorkflowStageLabel || detail.stage || detail.stageLabel || "";
+  document.getElementById("contract-owner-name").value = detail.contractOwnerName || detail.manager || currentUser.name || "";
+  document.getElementById("contract-owner-email").value = detail.contractOwnerEmail || detail.sellerEmail || currentUser.email || "";
   document.getElementById("contract-started-at").value = detail.contractStartedAt || "";
   document.getElementById("draft-version").value = detail.draftVersion || "";
   document.getElementById("clause-round-date").value = detail.clauseRoundDate || "";
   document.getElementById("contract-notes").value = detail.contractNotes || detail.notes || "";
   document.getElementById("document-pending-notes").value = detail.documentPendingNotes || "";
+  document.getElementById("clauses-under-discussion").value = detail.clausesUnderDiscussion || "";
+  document.getElementById("legal-notes").value = detail.legalNotes || "";
+  document.getElementById("contract-next-action").value = detail.contractNextAction || detail.nextAction || "";
+  document.getElementById("signed-at").value = detail.signedAt || "";
   document.getElementById("operation-start-date").value = detail.operationStartDate || "";
-
-  if (!document.getElementById("contract-owner-name").value) {
-    document.getElementById("contract-owner-name").value = currentUser.name;
-  }
-
-  if (!document.getElementById("contract-owner-email").value) {
-    document.getElementById("contract-owner-email").value = currentUser.email;
-  }
+  document.getElementById("contract-next-stage-code").value = "";
+  setFormSubmitState("contract-form", false);
 }
 
 function setCheckedValues(name, values = []) {
@@ -2272,6 +2284,17 @@ function setRequestSaveState(inFlight) {
   button.textContent = requestSaveInFlight ? "Salvando..." : idleLabel;
 }
 
+function setFormSubmitState(formId, inFlight, busyLabel = "Salvando...") {
+  const form = document.getElementById(formId);
+  const button = form?.querySelector('button[type="submit"]');
+  if (!button) return;
+  if (!button.dataset.idleLabel) {
+    button.dataset.idleLabel = button.textContent.trim();
+  }
+  button.disabled = Boolean(inFlight);
+  button.textContent = inFlight ? busyLabel : button.dataset.idleLabel;
+}
+
 function resetRequestForm() {
   const form = document.getElementById("request-form");
   form.reset();
@@ -2327,8 +2350,8 @@ function populateRequestForm(detail) {
   document.getElementById("transport-region").value = detail.benefits?.find((item) => item.benefitType === "vale_transporte")?.regionValue || "18,00";
   document.getElementById("transport-notes").value = detail.benefits?.find((item) => item.benefitType === "vale_transporte")?.notes || "";
   document.getElementById("medical-notes").value = detail.benefits?.find((item) => item.benefitType === "assistencia_medica")?.notes || "";
-  document.getElementById("meal-notes").value = detail.benefits?.find((item) => item.benefitType === "vr")?.notes || "";
-  document.getElementById("food-notes").value = detail.benefits?.find((item) => item.benefitType === "va")?.notes || "";
+  document.getElementById("meal-notes").value = detail.benefits?.find((item) => item.benefitType === "refeicao")?.notes || "";
+  document.getElementById("food-notes").value = detail.benefits?.find((item) => item.benefitType === "vale_alimentacao")?.notes || "";
   document.getElementById("general-notes").value = detail.generalNotes || "";
   document.getElementById("technical-doc-notes").value = detail.technicalDocNotes || "";
   document.getElementById("save-request-button").dataset.idleLabel = detail.stageCode === "aguardando_informacoes"
@@ -2421,7 +2444,7 @@ function validateCommercialPayload(payload) {
   if (!payload.requestId && !payload.proposalRegistryId) missing.push("Selecione uma solicitacao ou proposta");
   if (!payload.sellerName) missing.push("Vendedor responsável");
   if (!payload.sellerEmail) missing.push("Email do vendedor");
-  if (!payload.negotiationStatus) missing.push("Status da negociacao");
+  if (!payload.negotiationStatus && payload.nextStageCode !== "em_triagem") missing.push("Status da negociacao");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
   if (payload.nextStageCode === "perdida" && !payload.lossReason) missing.push("Motivo padronizado da perda");
   if (payload.nextStageCode === "cancelada" && !payload.cancelReason) missing.push("Motivo padronizado do cancelamento");
@@ -3229,7 +3252,8 @@ async function loadAuthenticatedAppData() {
   renderDetail(initialDetail);
   renderHistory(initialDetail.history || []);
   renderAttachmentList("proposal-attachments", initialAttachments, ["anexo_inicial", "documento_tecnico_cliente"]);
-  renderAttachmentList("commercial-attachments", initialAttachments, ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
+  renderAttachmentList("commercial-attachments", initialAttachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+  renderAttachmentList("contract-attachments", initialAttachments, ["minuta_inicial", "contrato_assinado"]);
   await renderRequestFormPreview();
   populateRequestForm(initialDetail);
   resetProposalNumberForm();
@@ -3256,7 +3280,8 @@ async function selectRequest(requestId) {
   renderDetail(detail);
   renderHistory(detail.history || []);
   renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente"]);
-  renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
+  renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+  renderAttachmentList("contract-attachments", attachments, ["minuta_inicial", "contrato_assinado"]);
   populateRequestForm(detail);
   populateProposalForm(detail);
   populateCommercialForm(detail);
@@ -3400,6 +3425,9 @@ async function bootstrap() {
     if ((stageRow.dataset.moduleKey || currentView) === "contratos" && stageRow.dataset.proposalId) {
       try {
         const detail = await loadProposalNumberDetail(stageRow.dataset.proposalId);
+        const attachments = detail.requestId ? await loadRequestAttachments(detail.requestId) : [];
+        renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+        renderAttachmentList("contract-attachments", attachments, ["minuta_inicial", "contrato_assinado"]);
         renderProposalOnlyContext(detail);
         populateContractForm(detail);
         setActiveView("contratos");
@@ -3413,6 +3441,9 @@ async function bootstrap() {
     if (stageRow.dataset.proposalId && !stageRow.dataset.requestId) {
       try {
         const detail = await loadProposalNumberDetail(stageRow.dataset.proposalId);
+        const attachments = detail.requestId ? await loadRequestAttachments(detail.requestId) : [];
+        renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+        renderAttachmentList("contract-attachments", attachments, ["minuta_inicial", "contrato_assinado"]);
         renderProposalOnlyContext(detail);
         if ((stageRow.dataset.moduleKey || currentView) === "contratos") {
           populateContractForm(detail);
@@ -3574,22 +3605,11 @@ async function bootstrap() {
         && isViewAllowedByModule("propostas")
         && isViewAllowedByStage("propostas");
 
-      if (result.returnedToTriage) {
-        selectedRequestId = null;
-        updateRequestDeleteButton(null);
-        renderDetail(requestDetailFallback());
-        renderHistory([]);
-        renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
-        renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"]);
-        resetRequestForm();
-        populateProposalForm(requestDetailFallback());
-        populateCommercialForm(requestDetailFallback());
-        populateContractForm(requestDetailFallback());
-        populateProposalNumberLinkedRequest(null);
-        setActiveView(canOpenProposalQueue ? "propostas" : "solicitacoes");
-      } else if (detailId) {
+      if (detailId) {
         const detail = await selectRequest(detailId);
-        if (!isEditing) {
+        if (result.returnedToTriage) {
+          setActiveView(canOpenProposalQueue ? "propostas" : "solicitacoes");
+        } else if (!isEditing) {
           const targetView = preferredWorkflowView(
             detail,
             canOpenProposalQueue ? "propostas" : "solicitacoes"
@@ -3609,9 +3629,12 @@ async function bootstrap() {
 
   document.getElementById("proposal-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (proposalSaveInFlight) return;
     const payload = {
       ...buildProposalPayload(),
-      proposalFinalPdf: await collectFiles("proposal-final-pdf", false),
+      proposalFinalPdfFiles: await collectFiles("proposal-final-pdf"),
+      proposalOpenSpreadsheet: await collectFiles("proposal-open-sheet", false),
+      proposalTechnicalFile: await collectFiles("proposal-technical-file", false),
       proposalSupportingFiles: await collectFiles("proposal-supporting-files")
     };
     const missing = validateProposalPayload(payload);
@@ -3622,6 +3645,8 @@ async function bootstrap() {
     }
 
     try {
+      proposalSaveInFlight = true;
+      setFormSubmitState("proposal-form", true);
       const response = await fetchWithSession(`/api/requests/${payload.requestId}/proposal-record`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3642,9 +3667,11 @@ async function bootstrap() {
       }
       await refreshRequestsTable();
       await refreshDashboard();
+      await refreshProposalNumbers();
       await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
+      await fetchNotifications();
       if (refreshedDetail) {
         const targetView = preferredWorkflowView(refreshedDetail, "propostas");
         setActiveView(targetView);
@@ -3657,11 +3684,15 @@ async function bootstrap() {
       alert(result.message || "Triagem salva com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar a triagem: ${error.message}`);
+    } finally {
+      proposalSaveInFlight = false;
+      setFormSubmitState("proposal-form", false);
     }
   });
 
   document.getElementById("commercial-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (commercialSaveInFlight) return;
     const payload = {
       ...buildCommercialPayload(),
       acceptanceAttachment: await collectFiles("acceptance-attachment", false)
@@ -3674,6 +3705,8 @@ async function bootstrap() {
     }
 
     try {
+      commercialSaveInFlight = true;
+      setFormSubmitState("commercial-form", true);
       const isProposalOnlyRecord =
         payload.proposalRegistryId
         && (!payload.requestId || document.getElementById("commercial-request-number").value === "-");
@@ -3700,16 +3733,23 @@ async function bootstrap() {
       }
       await refreshRequestsTable();
       await refreshDashboard();
+      await refreshProposalNumbers();
+      await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
+      await fetchNotifications();
       alert(result.message || "Negociacao salva com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar a negociacao: ${error.message}`);
+    } finally {
+      commercialSaveInFlight = false;
+      setFormSubmitState("commercial-form", false);
     }
   });
 
   document.getElementById("contract-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (contractSaveInFlight) return;
     const payload = {
       ...buildContractPayload(),
       initialDraftFile: await collectFiles("initial-draft-file", false),
@@ -3723,6 +3763,8 @@ async function bootstrap() {
     }
 
     try {
+      contractSaveInFlight = true;
+      setFormSubmitState("contract-form", true);
       const targetUrl = payload.requestId
         ? `/api/requests/${payload.requestId}/contract-record`
         : `/api/proposal-numbers/${payload.proposalRegistryId}/contract-record`;
@@ -3746,11 +3788,17 @@ async function bootstrap() {
       }
       await refreshRequestsTable();
       await refreshDashboard();
+      await refreshProposalNumbers();
+      await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
+      await fetchNotifications();
       alert(result.message || "Contratual salvo com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar o contratual: ${error.message}`);
+    } finally {
+      contractSaveInFlight = false;
+      setFormSubmitState("contract-form", false);
     }
   });
 
@@ -3766,6 +3814,7 @@ async function bootstrap() {
 
   document.getElementById("proposal-number-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (proposalNumberSaveInFlight) return;
     const feedback = document.getElementById("proposal-number-feedback");
     feedback.textContent = "";
     const payload = await buildProposalNumberPayload();
@@ -3777,6 +3826,8 @@ async function bootstrap() {
     }
 
     try {
+      proposalNumberSaveInFlight = true;
+      setFormSubmitState("proposal-number-form", true);
       const isEditing = Boolean(payload.registryId);
       const url = isEditing ? `/api/proposal-numbers/${payload.registryId}` : "/api/proposal-numbers/generate";
       const method = isEditing ? "PUT" : "POST";
@@ -3791,15 +3842,24 @@ async function bootstrap() {
       }
 
       feedback.textContent = `${result.message || "Numero atualizado"} ${result.proposalNumber?.proposalNumberDisplay || ""}`.trim();
-      resetProposalNumberForm();
+      await refreshProposalNumbers();
+      await refreshCrmProposalRequests();
+      if (isEditing && result.proposalNumber?.id) {
+        const detail = await loadProposalNumberDetail(result.proposalNumber.id);
+        populateProposalNumberForEdit(detail);
+        setActiveView("proposta_crm");
+      } else {
+        resetProposalNumberForm();
+      }
       if (selectedRequestId) {
         const detail = await loadJson(`/api/requests/${selectedRequestId}`);
         populateProposalNumberLinkedRequest(detail);
       }
-      await refreshProposalNumbers();
-      await refreshCrmProposalRequests();
     } catch (error) {
       feedback.textContent = error.message;
+    } finally {
+      proposalNumberSaveInFlight = false;
+      setFormSubmitState("proposal-number-form", false);
     }
   });
 

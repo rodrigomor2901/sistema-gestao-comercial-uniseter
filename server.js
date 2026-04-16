@@ -22,25 +22,37 @@ const LEAD_SOURCE_OPTIONS = ["Prospeccao", "Indicacao Diretoria", "Indicacao Set
 const PROPOSAL_STATUS_OPTIONS = ["Gerado", "Em uso", "Vinculado ao CRM", "Em Negociacao", "Ganho", "Pedido", "Perdido", "Cancelado"];
 const DOCUMENT_TYPE_OPTIONS = ["PROPOSTA", "ORCAMENTO", "ADITIVO", "NOVA PROPOSTA", "REVISAO", "AUMENTO", "REDUCAO"];
 const INDUSTRY_OPTIONS = [
+  "AEROPORTOS",
   "AGROPECUARIA",
   "ASSOCIACOES DIVERSAS",
   "BANCOS / FINANCEIRAS",
   "BARES E RESTAURANTES",
+  "CALL CENTER",
   "COMERCIO VAREJISTA",
   "CONCESSIONARIAS",
   "CONDOMINIO RESIDENCIAL",
   "CONDOMINIOS COMERCIAL",
   "CONSULTORIOS MEDICO/ODONTOLOGICO",
+  "CONSTRUTORAS",
   "DISTRIBUIDORES/ COMERCIO ATACADISTA",
   "ESCRITORIOS DE ADVOCACIA",
+  "FARMACEUTICAS",
   "GERADORAS/ DISTRIB. DE ENERGIA",
   "HOSPITAIS",
   "HOTEIS",
   "INCORPORADORAS E ADM IMOBILIARIAS",
+  "INDUSTRIA ALIMENTICIA",
   "INDUSTRIAS",
   "INSTITUICOES DE ENSINO",
   "LABORATORIOS DE ANALISE CLINICA",
+  "LOGISTICA / CENTROS DE DISTRIBUICAO",
   "METALURGICAS E FUNDICOES",
+  "SERVICOS",
+  "SHOPPING CENTER",
+  "SUPERMERCADOS",
+  "TECNOLOGIA",
+  "TRANSPORTES",
+  "USINAS",
   "BOMBEIRO"
 ];
 const SERVICE_TYPE_OPTIONS = [
@@ -978,6 +990,11 @@ function getSaoPauloIsoDate() {
 
 function buildProposalStageCodeSql(alias = "pr") {
   return `CASE
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'em triagem' THEN 'em_triagem'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'aguardando informacoes' THEN 'aguardando_informacoes'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('em preparacao da proposta', 'em elaboracao da proposta') THEN 'em_preparacao_da_proposta'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'proposta finalizada' THEN 'proposta_finalizada'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'recebimento de proposta' THEN 'enviada_ao_vendedor'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita', 'proposta ganha') THEN 'proposta_aceita'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'elaboracao_de_contrato'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'negociacao_de_clausulas'
@@ -990,6 +1007,11 @@ function buildProposalStageCodeSql(alias = "pr") {
 
 function buildProposalStageLabelSql(alias = "pr") {
   return `CASE
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'em triagem' THEN 'Em triagem'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'aguardando informacoes' THEN 'Aguardando informações'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('em preparacao da proposta', 'em elaboracao da proposta') THEN 'Em Elaboração da Proposta'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'proposta finalizada' THEN 'Proposta finalizada'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'recebimento de proposta' THEN 'Recebimento de Proposta'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('ganho', 'pedido', 'proposta aceita', 'proposta ganha') THEN 'Proposta Ganha'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'elaboracao de contrato' THEN 'Elaboração de contrato'
     WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'negociacao de clausulas' THEN 'Negociação de cláusulas'
@@ -1000,8 +1022,57 @@ function buildProposalStageLabelSql(alias = "pr") {
   END`;
 }
 
+function buildProposalCommercialStageCodeSql(alias = "pr") {
+  return `CASE
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'em triagem' THEN 'em_triagem'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'aguardando informacoes' THEN 'aguardando_informacoes'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('em preparacao da proposta', 'em elaboracao da proposta') THEN 'em_preparacao_da_proposta'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'proposta finalizada' THEN 'proposta_finalizada'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'recebimento de proposta' THEN 'enviada_ao_vendedor'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN (
+      'ganho',
+      'pedido',
+      'proposta aceita',
+      'proposta ganha',
+      'elaboracao de contrato',
+      'negociacao de clausulas',
+      'contrato assinado'
+    ) THEN 'proposta_aceita'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'perdido' THEN 'perdida'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'cancelado' THEN 'cancelada'
+    ELSE 'em_negociacao'
+  END`;
+}
+
+function buildProposalCommercialStageLabelSql(alias = "pr") {
+  return `CASE
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'em triagem' THEN 'Em triagem'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'aguardando informacoes' THEN 'Aguardando informações'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN ('em preparacao da proposta', 'em elaboracao da proposta') THEN 'Em Elaboração da Proposta'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'proposta finalizada' THEN 'Proposta finalizada'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'recebimento de proposta' THEN 'Recebimento de Proposta'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) IN (
+      'ganho',
+      'pedido',
+      'proposta aceita',
+      'proposta ganha',
+      'elaboracao de contrato',
+      'negociacao de clausulas',
+      'contrato assinado'
+    ) THEN 'Proposta Ganha'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'perdido' THEN 'Perdida'
+    WHEN LOWER(COALESCE(${alias}.negotiation_status, '')) = 'cancelado' THEN 'Cancelada'
+    ELSE 'Em negociacao'
+  END`;
+}
+
 function mapProposalStageCodeToStatus(nextStageCode, fallbackStatus = null) {
   const mapping = {
+    em_triagem: "Em triagem",
+    aguardando_informacoes: "Aguardando informacoes",
+    em_preparacao_da_proposta: "Em Elaboracao da Proposta",
+    proposta_finalizada: "Proposta finalizada",
+    enviada_ao_vendedor: "Recebimento de Proposta",
     em_negociacao: "Em negociacao",
     proposta_aceita: "Proposta Ganha",
     elaboracao_de_contrato: "Elaboracao de contrato",
@@ -1882,7 +1953,7 @@ async function createStatusChangeNotifications(client, {
   const recipients = [...new Set(
     (recipientUserIds || [])
       .map((item) => parsePositiveInteger(item))
-      .filter((item) => item && item !== actorUserId)
+      .filter(Boolean)
   )];
 
   if (!recipients.length) return [];
@@ -3353,6 +3424,8 @@ async function listProposalNumbers(filters = {}, session) {
        COALESCE(req.request_number, pr.crm_request_number, '-') AS "requestNumber",
        ${buildProposalStageCodeSql("pr")} AS "stageCode",
        ${buildProposalStageLabelSql("pr")} AS "stageLabel",
+       ${buildProposalCommercialStageCodeSql("pr")} AS "commercialStageCode",
+       ${buildProposalCommercialStageLabelSql("pr")} AS "commercialStageLabel",
        pr.document_type AS "documentType",
        pr.branch_name AS "branchName",
        pr.negotiation_status AS status,
@@ -3769,7 +3842,10 @@ async function getProposalNumberDetail(proposalId, session) {
        pr.uploaded_file_name AS "uploadedFileName",
        seller_user.email AS "sellerEmail",
        COALESCE(pr.manager_name, seller_user.name) AS seller,
+       ${buildProposalStageCodeSql("pr")} AS "stageCode",
        ${buildProposalStageLabelSql("pr")} AS stage,
+       ${buildProposalCommercialStageCodeSql("pr")} AS "commercialStageCode",
+       ${buildProposalCommercialStageLabelSql("pr")} AS "commercialStageLabel",
        TO_CHAR(pr.sent_to_seller_at, 'YYYY-MM-DD') AS "sentToSellerAt",
        COALESCE(pr.seller_receipt_confirmed, FALSE) AS "commercialSellerReceiptConfirmed",
        pr.negotiation_status AS "commercialNegotiationStatus",
@@ -3794,6 +3870,7 @@ async function getProposalNumberDetail(proposalId, session) {
        TO_CHAR(pr.contract_started_at, 'YYYY-MM-DD') AS "contractStartedAt",
        pr.draft_version AS "draftVersion",
        TO_CHAR(pr.clause_round_date, 'YYYY-MM-DD') AS "clauseRoundDate",
+       pr.notes AS "contractNotes",
        pr.document_pending_notes AS "documentPendingNotes",
        TO_CHAR(pr.operation_start_date, 'YYYY-MM-DD') AS "operationStartDate"
      FROM proposal_registry pr
@@ -4498,6 +4575,10 @@ async function getRequestDetailFromDb(requestId, session) {
        linked_proposal.proposal_number_display AS "proposalNumber",
        TO_CHAR(linked_proposal.issue_date, 'DD/MM/YYYY') AS "proposalIssueDate",
        linked_proposal.negotiation_status AS "proposalStatus",
+       ${buildProposalStageCodeSql("linked_proposal")} AS "proposalWorkflowStageCode",
+       ${buildProposalStageLabelSql("linked_proposal")} AS "proposalWorkflowStageLabel",
+       ${buildProposalCommercialStageCodeSql("linked_proposal")} AS "proposalCommercialStageCode",
+       ${buildProposalCommercialStageLabelSql("linked_proposal")} AS "proposalCommercialStageLabel",
        linked_proposal.manager_name AS "proposalManager",
        linked_proposal.proposal_value AS "proposalValue",
        triage_user.name AS "triageOwnerName",
@@ -4528,7 +4609,19 @@ async function getRequestDetailFromDb(requestId, session) {
        loss_reasons.name AS "commercialLossReason",
        cancel_reasons.name AS "commercialCancelReason",
        commercial_records.probability_level AS "commercialProbabilityLevel",
-       commercial_records.probability_reason AS "commercialProbabilityReason"
+       commercial_records.probability_reason AS "commercialProbabilityReason",
+       contract_owner_user.name AS "contractOwnerName",
+       contract_owner_user.email AS "contractOwnerEmail",
+       TO_CHAR(contract_records.contract_started_at, 'YYYY-MM-DD') AS "contractStartedAt",
+       contract_records.contract_notes AS "contractNotes",
+       contract_records.document_pending_notes AS "documentPendingNotes",
+       TO_CHAR(contract_records.clause_round_date, 'YYYY-MM-DD') AS "clauseRoundDate",
+       contract_records.draft_version AS "draftVersion",
+       contract_records.clauses_under_discussion AS "clausesUnderDiscussion",
+       contract_records.legal_notes AS "legalNotes",
+       contract_records.next_action AS "contractNextAction",
+       TO_CHAR(contract_records.signed_at, 'YYYY-MM-DD') AS "signedAt",
+       TO_CHAR(contract_records.operation_start_date, 'YYYY-MM-DD') AS "operationStartDate"
      FROM requests r
      JOIN clients c ON c.id = r.client_id
      JOIN workflow_stages ws ON ws.id = r.current_stage_id
@@ -4537,6 +4630,7 @@ async function getRequestDetailFromDb(requestId, session) {
      LEFT JOIN commercial_records ON commercial_records.request_id = r.id
      LEFT JOIN users commercial_seller_user ON commercial_seller_user.id = commercial_records.seller_user_id
      LEFT JOIN contract_records ON contract_records.request_id = r.id
+     LEFT JOIN users contract_owner_user ON contract_owner_user.id = contract_records.contract_owner_user_id
      LEFT JOIN proposal_records ON proposal_records.request_id = r.id
      LEFT JOIN users triage_user ON triage_user.id = proposal_records.triage_owner_user_id
      LEFT JOIN users proposal_user ON proposal_user.id = proposal_records.proposal_owner_user_id
@@ -5131,6 +5225,8 @@ function attachmentLabel(type) {
     documento_tecnico_cliente: "Documento tecnico do cliente",
     proposta_final_pdf: "PDF da proposta",
     anexo_proposta_complementar: "Arquivo complementar da proposta",
+    planilha_aberta_proposta: "Planilha aberta",
+    proposta_tecnica: "Proposta tecnica",
     anexo_aceite: "Anexo do aceite",
     minuta_inicial: "Minuta inicial",
     contrato_assinado: "Contrato assinado"
@@ -5292,12 +5388,19 @@ async function saveProposalRecord(payload, session) {
       "SELECT id FROM proposal_records WHERE request_id = $1",
       [requestId]
     );
-    const finalPdfAttachmentId = await createAttachmentRecord(client, {
+    const finalPdfAttachmentIds = await createAttachmentRecords(client, {
+      requestId,
+      uploadedByUserId: triageOwnerId || proposalOwnerId,
+      attachmentType: "proposta_final_pdf",
+      files: payload.proposalFinalPdfFiles || [],
+      description: "Arquivo final da proposta"
+    });
+    const finalPdfAttachmentId = finalPdfAttachmentIds[0] || await createAttachmentRecord(client, {
       requestId,
       uploadedByUserId: triageOwnerId || proposalOwnerId,
       attachmentType: "proposta_final_pdf",
       file: payload.proposalFinalPdf,
-      description: "PDF final da proposta"
+      description: "Arquivo final da proposta"
     });
     await createAttachmentRecords(client, {
       requestId,
@@ -5305,6 +5408,20 @@ async function saveProposalRecord(payload, session) {
       attachmentType: "anexo_proposta_complementar",
       files: payload.proposalSupportingFiles,
       description: "Arquivo complementar da proposta"
+    });
+    await createAttachmentRecord(client, {
+      requestId,
+      uploadedByUserId: triageOwnerId || proposalOwnerId,
+      attachmentType: "planilha_aberta_proposta",
+      file: payload.proposalOpenSpreadsheet,
+      description: "Planilha aberta da proposta"
+    });
+    await createAttachmentRecord(client, {
+      requestId,
+      uploadedByUserId: triageOwnerId || proposalOwnerId,
+      attachmentType: "proposta_tecnica",
+      file: payload.proposalTechnicalFile,
+      description: "Proposta tecnica"
     });
 
     if (existing.rows[0]) {
@@ -5504,13 +5621,15 @@ async function saveCommercialRecord(payload, session) {
 	         WHERE pr.id = $1`,
 	        [proposalRegistryId]
 	      );
-      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "em_negociacao";
+	      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "em_negociacao";
       assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
       assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
       const allowedTransitions = {
         enviada_ao_vendedor: ["enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
         em_negociacao: ["em_negociacao", "proposta_aceita", "perdida", "cancelada"],
-        proposta_aceita: ["proposta_aceita"]
+        proposta_aceita: ["proposta_aceita", "em_negociacao"],
+        perdida: ["perdida", "em_negociacao"],
+        cancelada: ["cancelada", "em_negociacao"]
       };
       if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
         throw new Error("Fluxo invalido para a etapa atual da negociacao.");
@@ -5611,6 +5730,7 @@ async function saveCommercialRecord(payload, session) {
 	         r.request_number,
 	         r.current_stage_id,
 	         r.current_owner_user_id,
+           r.seller_user_id,
 	         ws.code AS current_stage_code,
          linked_proposal.id AS "proposalRegistryId"
        FROM requests r
@@ -5631,9 +5751,11 @@ async function saveCommercialRecord(payload, session) {
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
-      enviada_ao_vendedor: ["enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada"],
-      em_negociacao: ["em_negociacao", "proposta_aceita", "perdida", "cancelada"],
-      proposta_aceita: ["proposta_aceita"]
+      enviada_ao_vendedor: ["enviada_ao_vendedor", "em_negociacao", "proposta_aceita", "perdida", "cancelada", "em_triagem"],
+      em_negociacao: ["em_negociacao", "proposta_aceita", "perdida", "cancelada", "em_triagem"],
+      proposta_aceita: ["proposta_aceita", "em_negociacao", "em_triagem"],
+      perdida: ["perdida", "em_negociacao", "em_triagem"],
+      cancelada: ["cancelada", "em_negociacao", "em_triagem"]
     };
     if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
       throw new Error("Fluxo invalido para a etapa atual da negociacao.");
@@ -5756,6 +5878,17 @@ async function saveCommercialRecord(payload, session) {
       );
     }
 
+    const triageOwnerResult = await client.query(
+      `SELECT triage_owner_user_id
+       FROM proposal_records
+       WHERE request_id = $1
+       LIMIT 1`,
+      [requestId]
+    );
+    const triageOwnerId = triageOwnerResult.rows[0]?.triage_owner_user_id || null;
+    const nextOwnerId = payload.nextStageCode === "em_triagem"
+      ? (triageOwnerId || requestResult.rows[0].current_owner_user_id || requestResult.rows[0].seller_user_id)
+      : sellerUserId;
     const stageChanged = Number(nextStageId) !== Number(currentStageId);
 
     await client.query(
@@ -5768,14 +5901,16 @@ async function saveCommercialRecord(payload, session) {
            status_final = CASE
              WHEN $4 = 'perdida' THEN 'Perdida'
              WHEN $4 = 'cancelada' THEN 'Cancelada'
+             WHEN $4 IN ('em_triagem', 'enviada_ao_vendedor', 'em_negociacao', 'proposta_aceita') THEN NULL
              ELSE status_final
            END,
            closed_at = CASE
-             WHEN $4 IN ('perdida', 'cancelada') THEN NOW()
-             ELSE closed_at
+              WHEN $4 IN ('perdida', 'cancelada') THEN NOW()
+              WHEN $4 IN ('em_triagem', 'em_negociacao', 'proposta_aceita', 'enviada_ao_vendedor') THEN NULL
+              ELSE closed_at
            END
        WHERE id = $1`,
-      [requestId, nextStageId, sellerUserId, payload.nextStageCode, lostReasonId, cancelReasonId, stageChanged]
+      [requestId, nextStageId, nextOwnerId, payload.nextStageCode, lostReasonId, cancelReasonId, stageChanged]
     );
 
     if (stageChanged) {
@@ -5790,7 +5925,7 @@ async function saveCommercialRecord(payload, session) {
           currentStageId,
           nextStageId,
           sellerUserId,
-          sellerUserId,
+          nextOwnerId,
           "ok",
           payload.nextAction || payload.acceptedNote || payload.commercialNotes || "Negociacao atualizada."
         ]
