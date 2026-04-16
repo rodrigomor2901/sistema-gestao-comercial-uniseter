@@ -1156,6 +1156,29 @@ input[type="file"] {
   align-items: end;
 }
 
+.admin-lookup-group-multi {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f8f3ea;
+}
+
+.admin-lookup-group-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.admin-lookup-group-option input {
+  width: auto;
+  min-width: 0;
+}
+
 .admin-sla-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: end;
@@ -1316,6 +1339,7 @@ input[type="file"] {
   .executive-row { grid-template-columns: 120px 1fr 90px; }
   .conversion-grid { grid-template-columns: 1fr; }
   .admin-lookup-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-lookup-group-multi { grid-template-columns: 1fr; }
   .proposal-number-grid,
   .proposal-number-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

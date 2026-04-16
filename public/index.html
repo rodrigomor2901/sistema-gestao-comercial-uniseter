@@ -933,6 +933,7 @@
               <form id="admin-lookup-form" class="form-layout">
                 <input id="admin-lookup-item-id" type="hidden" />
                 <input id="admin-lookup-category-key" type="hidden" />
+                <input id="admin-lookup-related-ids" type="hidden" />
                 <div class="form-block compact-block">
                   <div class="form-grid form-grid--wide admin-lookup-grid">
                     <div class="control control-span-2">
@@ -944,6 +945,7 @@
                       <input id="admin-lookup-group-key" name="groupKey" list="admin-lookup-group-options" placeholder="Ex.: Vigilancia" />
                       <small class="field-hint">Para equipamentos por serviço, informe ou selecione o serviço relacionado.</small>
                       <datalist id="admin-lookup-group-options"></datalist>
+                      <div id="admin-lookup-group-multi" class="admin-lookup-group-multi" hidden></div>
                     </div>
                     <div class="control">
                       <label for="admin-lookup-sort-order">Ordem</label>

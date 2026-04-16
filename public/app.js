@@ -1171,7 +1171,11 @@ function renderAdminLookupItems(categoryKey = activeAdminLookupCategory) {
   table.innerHTML = items.map((item) => `
     <tr>
       <td>${escapeHtml(item.value)}</td>
-      <td>${escapeHtml(item.groupKey || "-")}</td>
+      <td>${escapeHtml(
+        Array.isArray(item.groupKeys) && item.groupKeys.length
+          ? item.groupKeys.join(", ")
+          : (item.groupKey || "-")
+      )}</td>
       <td>${item.sortOrder ?? "-"}</td>
       <td>${item.isActive ? "Ativo" : "Inativo"}</td>
       <td><button type="button" class="table-action admin-lookup-edit" data-lookup-id="${item.id}" data-lookup-category="${category.key}">Editar</button></td>
@@ -1190,26 +1194,47 @@ function syncAdminLookupGroupControl(categoryKey = activeAdminLookupCategory) {
   const category = getAdminLookupCategoryMeta(categoryKey);
   const wrapper = document.getElementById("admin-lookup-group-control");
   const input = document.getElementById("admin-lookup-group-key");
-  if (!wrapper || !input) return;
+  const multi = document.getElementById("admin-lookup-group-multi");
+  if (!wrapper || !input || !multi) return;
 
   const grouped = Boolean(category?.grouped);
+  const isEquipmentCategory = categoryKey === "equipmentOptions";
   wrapper.hidden = !grouped;
-  input.required = grouped;
+  input.hidden = isEquipmentCategory;
+  input.required = grouped && !isEquipmentCategory;
+  multi.hidden = !(grouped && isEquipmentCategory);
   if (!grouped) {
     input.value = "";
   }
   syncAdminLookupGroupOptions(categoryKey);
+
+  if (grouped && isEquipmentCategory) {
+    const options = adminLookupConfigCache.groupOptions?.[categoryKey] || [];
+    multi.innerHTML = options.map((item) => `
+      <label class="admin-lookup-group-option">
+        <input type="checkbox" name="adminLookupGroupKeys" value="${escapeHtml(item)}" />
+        <span>${escapeHtml(item)}</span>
+      </label>
+    `).join("");
+  } else {
+    multi.innerHTML = "";
+  }
 }
 
 function populateAdminLookupForm(item = null) {
   const category = getAdminLookupCategoryMeta();
   document.getElementById("admin-lookup-category-key").value = category?.key || "";
   document.getElementById("admin-lookup-item-id").value = item?.id || "";
+  document.getElementById("admin-lookup-related-ids").value = (item?.relatedIds || []).join(",");
   document.getElementById("admin-lookup-value").value = item?.value || "";
   document.getElementById("admin-lookup-group-key").value = item?.groupKey || "";
   document.getElementById("admin-lookup-sort-order").value = item?.sortOrder ?? "";
   document.getElementById("admin-lookup-active").value = String(item?.isActive ?? true);
   syncAdminLookupGroupControl(category?.key || "");
+  const selectedGroupKeys = new Set((item?.groupKeys || []).map((entry) => String(entry)));
+  document.querySelectorAll('input[name="adminLookupGroupKeys"]').forEach((input) => {
+    input.checked = selectedGroupKeys.has(input.value);
+  });
 }
 
 function resetAdminLookupForm() {
@@ -1218,6 +1243,7 @@ function resetAdminLookupForm() {
   form.reset();
   document.getElementById("admin-lookup-item-id").value = "";
   document.getElementById("admin-lookup-category-key").value = activeAdminLookupCategory || "";
+  document.getElementById("admin-lookup-related-ids").value = "";
   document.getElementById("admin-lookup-active").value = "true";
   syncAdminLookupGroupControl(activeAdminLookupCategory);
 }
@@ -4020,6 +4046,10 @@ async function bootstrap() {
   document.getElementById("admin-lookup-deactivate").addEventListener("click", async () => {
     const itemId = document.getElementById("admin-lookup-item-id").value;
     const categoryKey = document.getElementById("admin-lookup-category-key").value || activeAdminLookupCategory;
+    const relatedIds = document.getElementById("admin-lookup-related-ids").value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
     if (!itemId || !categoryKey) {
       alert("Selecione um item para retirar da lista.");
       return;
@@ -4027,7 +4057,9 @@ async function bootstrap() {
 
     try {
       const response = await fetchWithSession(`/api/admin/lookups-config/${categoryKey}/${itemId}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relatedIds })
       });
       const result = await response.json();
       if (!response.ok) {
@@ -4107,9 +4139,16 @@ async function bootstrap() {
     event.preventDefault();
     const categoryKey = document.getElementById("admin-lookup-category-key").value || activeAdminLookupCategory;
     const itemId = document.getElementById("admin-lookup-item-id").value;
+    const relatedIds = document.getElementById("admin-lookup-related-ids").value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const selectedGroupKeys = [...document.querySelectorAll('input[name="adminLookupGroupKeys"]:checked')].map((input) => input.value);
     const payload = {
       value: document.getElementById("admin-lookup-value").value.trim(),
       groupKey: document.getElementById("admin-lookup-group-key").value.trim(),
+      groupKeys: selectedGroupKeys,
+      relatedIds,
       sortOrder: document.getElementById("admin-lookup-sort-order").value.trim(),
       isActive: document.getElementById("admin-lookup-active").value === "true"
     };
@@ -4120,7 +4159,12 @@ async function bootstrap() {
       return;
     }
 
-    if (category?.grouped && !payload.groupKey) {
+    if (categoryKey === "equipmentOptions" && payload.groupKeys.length === 0) {
+      alert("Selecione pelo menos um tipo de serviço para este equipamento.");
+      return;
+    }
+
+    if (category?.grouped && categoryKey !== "equipmentOptions" && !payload.groupKey) {
       alert("Informe o agrupamento deste item.");
       return;
     }

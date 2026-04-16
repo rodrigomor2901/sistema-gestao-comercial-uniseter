@@ -1763,7 +1763,44 @@ function buildLookupConfigResponse(appLookupRows, reasonLookupMap) {
 
   LOOKUP_CATEGORY_DEFINITIONS.forEach((category) => {
     if (category.source === "app_lookup_options") {
-      itemsByCategory[category.key] = appLookupRows.filter((item) => item.category === category.key);
+      const rawItems = appLookupRows.filter((item) => item.category === category.key);
+      if (category.key === "equipmentOptions") {
+        const groupedItems = new Map();
+        rawItems.forEach((item) => {
+          const key = String(item.value || "").trim().toLowerCase();
+          if (!groupedItems.has(key)) {
+            groupedItems.set(key, {
+              ...item,
+              relatedIds: [item.id],
+              groupKeys: item.groupKey ? [item.groupKey] : []
+            });
+            return;
+          }
+
+          const current = groupedItems.get(key);
+          current.relatedIds.push(item.id);
+          if (item.groupKey && !current.groupKeys.includes(item.groupKey)) {
+            current.groupKeys.push(item.groupKey);
+          }
+          current.sortOrder = Math.min(Number(current.sortOrder ?? 0), Number(item.sortOrder ?? 0));
+          current.isActive = current.isActive || item.isActive;
+        });
+
+        itemsByCategory[category.key] = [...groupedItems.values()]
+          .map((item) => ({
+            ...item,
+            groupKeys: [...item.groupKeys].sort((left, right) => left.localeCompare(right, "pt-BR")),
+            groupKey: [...item.groupKeys].sort((left, right) => left.localeCompare(right, "pt-BR")).join(", ")
+          }))
+          .sort((left, right) => {
+            const orderDiff = Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0);
+            if (orderDiff !== 0) return orderDiff;
+            return String(left.value || "").localeCompare(String(right.value || ""), "pt-BR");
+          });
+        return;
+      }
+
+      itemsByCategory[category.key] = rawItems;
       return;
     }
 
@@ -2405,14 +2442,22 @@ async function createLookupConfigurationItem(categoryKey, payload, session) {
   const category = getLookupCategoryConfig(categoryKey);
   const value = String(payload.value || "").trim();
   const groupKey = String(payload.groupKey || "").trim() || null;
+  const groupKeys = Array.isArray(payload.groupKeys)
+    ? [...new Set(payload.groupKeys.map((item) => normalizeServiceLabel(item)).filter(Boolean))]
+    : [];
   const isActive = payload.isActive !== false;
   const rawSortOrder = String(payload.sortOrder ?? "").trim();
 
   if (!value) {
     throw new Error("Informe o valor do item.");
   }
+  if (categoryKey === "equipmentOptions" && groupKeys.length === 0) {
+    throw new Error("Selecione pelo menos um tipo de serviço para o equipamento.");
+  }
   if (category.grouped && !groupKey) {
-    throw new Error("Informe o agrupamento do item.");
+    if (categoryKey !== "equipmentOptions") {
+      throw new Error("Informe o agrupamento do item.");
+    }
   }
 
   return withTransaction(async (client) => {
@@ -2439,7 +2484,56 @@ async function createLookupConfigurationItem(categoryKey, payload, session) {
 
     const sortOrder = rawSortOrder !== "" && Number.isFinite(Number(rawSortOrder))
       ? Number(rawSortOrder)
-      : await getNextLookupSortOrder(client, categoryKey, groupKey);
+      : await getNextLookupSortOrder(client, categoryKey, categoryKey === "equipmentOptions" ? groupKeys[0] || null : groupKey);
+
+    if (categoryKey === "equipmentOptions") {
+      const rows = [];
+      for (const serviceKey of groupKeys) {
+        const existing = await client.query(
+          `SELECT id
+             FROM app_lookup_options
+            WHERE category = $1
+              AND COALESCE(group_key, '') = COALESCE($2, '')
+              AND value = $3
+            LIMIT 1`,
+          [categoryKey, serviceKey, value]
+        );
+        const result = existing.rows[0]
+          ? await client.query(
+            `UPDATE app_lookup_options
+                SET sort_order = $2,
+                    is_active = $3,
+                    updated_at = NOW()
+              WHERE id = $1
+            RETURNING id, category, group_key AS "groupKey", value, sort_order AS "sortOrder", is_active AS "isActive"`,
+            [existing.rows[0].id, sortOrder, isActive]
+          )
+          : await client.query(
+            `INSERT INTO app_lookup_options (category, group_key, value, sort_order, is_active)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, category, group_key AS "groupKey", value, sort_order AS "sortOrder", is_active AS "isActive"`,
+            [categoryKey, serviceKey, value, sortOrder, isActive]
+          );
+        rows.push(result.rows[0]);
+      }
+
+      await logAuditEntry(client, {
+        actor: session,
+        actionType: "lookup_config_create",
+        entityType: categoryKey,
+        entityId: rows[0]?.id || null,
+        description: `${category.label}: item '${value}' cadastrado.`,
+        metadata: { categoryKey, value, groupKeys, sortOrder, isActive }
+      });
+
+      return {
+        ...(rows[0] || {}),
+        groupKey: groupKeys.join(", "),
+        groupKeys,
+        relatedIds: rows.map((row) => row.id)
+      };
+    }
+
     const existing = await client.query(
       `SELECT id
          FROM app_lookup_options
@@ -2482,14 +2576,25 @@ async function updateLookupConfigurationItem(categoryKey, itemId, payload, sessi
   const category = getLookupCategoryConfig(categoryKey);
   const value = String(payload.value || "").trim();
   const groupKey = String(payload.groupKey || "").trim() || null;
+  const groupKeys = Array.isArray(payload.groupKeys)
+    ? [...new Set(payload.groupKeys.map((item) => normalizeServiceLabel(item)).filter(Boolean))]
+    : [];
+  const relatedIds = Array.isArray(payload.relatedIds)
+    ? [...new Set(payload.relatedIds.map((item) => parsePositiveInteger(item)).filter(Boolean))]
+    : [];
   const isActive = payload.isActive !== false;
   const rawSortOrder = String(payload.sortOrder ?? "").trim();
 
   if (!value) {
     throw new Error("Informe o valor do item.");
   }
+  if (categoryKey === "equipmentOptions" && groupKeys.length === 0) {
+    throw new Error("Selecione pelo menos um tipo de serviço para o equipamento.");
+  }
   if (category.grouped && !groupKey) {
-    throw new Error("Informe o agrupamento do item.");
+    if (categoryKey !== "equipmentOptions") {
+      throw new Error("Informe o agrupamento do item.");
+    }
   }
 
   return withTransaction(async (client) => {
@@ -2519,7 +2624,56 @@ async function updateLookupConfigurationItem(categoryKey, itemId, payload, sessi
 
     const sortOrder = rawSortOrder !== "" && Number.isFinite(Number(rawSortOrder))
       ? Number(rawSortOrder)
-      : await getNextLookupSortOrder(client, categoryKey, groupKey);
+      : await getNextLookupSortOrder(client, categoryKey, categoryKey === "equipmentOptions" ? groupKeys[0] || null : groupKey);
+
+    if (categoryKey === "equipmentOptions") {
+      const idsToReplace = relatedIds.length ? relatedIds : [itemId];
+      const existingRows = await client.query(
+        `SELECT id
+           FROM app_lookup_options
+          WHERE category = $1
+            AND id = ANY($2::bigint[])`,
+        [categoryKey, idsToReplace]
+      );
+      if (!existingRows.rows.length) {
+        throw new Error("Item não encontrado.");
+      }
+
+      await client.query(
+        `DELETE FROM app_lookup_options
+          WHERE category = $1
+            AND id = ANY($2::bigint[])`,
+        [categoryKey, existingRows.rows.map((row) => row.id)]
+      );
+
+      const rows = [];
+      for (const serviceKey of groupKeys) {
+        const result = await client.query(
+          `INSERT INTO app_lookup_options (category, group_key, value, sort_order, is_active)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, category, group_key AS "groupKey", value, sort_order AS "sortOrder", is_active AS "isActive"`,
+          [categoryKey, serviceKey, value, sortOrder, isActive]
+        );
+        rows.push(result.rows[0]);
+      }
+
+      await logAuditEntry(client, {
+        actor: session,
+        actionType: "lookup_config_update",
+        entityType: categoryKey,
+        entityId: rows[0]?.id || itemId,
+        description: `${category.label}: item '${value}' atualizado.`,
+        metadata: { categoryKey, value, groupKeys, sortOrder, isActive }
+      });
+
+      return {
+        ...(rows[0] || {}),
+        groupKey: groupKeys.join(", "),
+        groupKeys,
+        relatedIds: rows.map((row) => row.id)
+      };
+    }
+
     const result = await client.query(
       `UPDATE app_lookup_options
           SET value = $2,
@@ -2548,7 +2702,7 @@ async function updateLookupConfigurationItem(categoryKey, itemId, payload, sessi
   });
 }
 
-async function deactivateLookupConfigurationItem(categoryKey, itemId, session) {
+async function deactivateLookupConfigurationItem(categoryKey, itemId, session, payload = {}) {
   const category = getLookupCategoryConfig(categoryKey);
   return withTransaction(async (client) => {
     let result;
@@ -2561,14 +2715,20 @@ async function deactivateLookupConfigurationItem(categoryKey, itemId, session) {
         [itemId]
       );
     } else {
+      const relatedIds = Array.isArray(payload.relatedIds)
+        ? [...new Set(payload.relatedIds.map((item) => parsePositiveInteger(item)).filter(Boolean))]
+        : [];
+      const idsToDeactivate = categoryKey === "equipmentOptions" && relatedIds.length
+        ? relatedIds
+        : [itemId];
       result = await client.query(
         `UPDATE app_lookup_options
             SET is_active = FALSE,
                 updated_at = NOW()
-          WHERE id = $1
-            AND category = $2
+          WHERE category = $1
+            AND id = ANY($2::bigint[])
         RETURNING id, value`,
-        [itemId, categoryKey]
+        [categoryKey, idsToDeactivate]
       );
     }
 
@@ -6574,7 +6734,9 @@ const server = http.createServer(async (request, response) => {
       const pathParts = url.pathname.split("/");
       const categoryKey = pathParts[pathParts.length - 2];
       const itemId = Number(pathParts[pathParts.length - 1]);
-      await deactivateLookupConfigurationItem(categoryKey, itemId, session);
+      const body = await readBody(request);
+      const payload = JSON.parse(body || "{}");
+      await deactivateLookupConfigurationItem(categoryKey, itemId, session, payload);
       sendJson(response, 200, { message: "Item retirado da lista com sucesso." });
       return;
     }
