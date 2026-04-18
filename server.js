@@ -2046,6 +2046,29 @@ function buildHistoryActorLabel(actorName, actorEmail) {
   return name || email || "Sistema";
 }
 
+function buildInitialRevisionHistoryEntry({
+  createdAtLabel,
+  stageLabel,
+  actorLabel,
+  proposalValue,
+  bdi,
+  notes
+} = {}) {
+  return {
+    createdAtLabel: createdAtLabel || "-",
+    entryTypeLabel: "Proposta inicial",
+    stageLabel: stageLabel || "-",
+    actorLabel: actorLabel || "Sistema",
+    proposalValueLabel: proposalValue === null || proposalValue === undefined
+      ? "-"
+      : Number(proposalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    bdiLabel: bdi === null || bdi === undefined
+      ? "-"
+      : `${Number(bdi).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+    notes: notes || "Valor e margem iniciais da proposta."
+  };
+}
+
 async function createNegotiationDiaryEntry(client, payload, session, context = {}) {
   const summary = String(payload.negotiationSummary || "").trim();
   const revisedProposalValue = toNullableNumber(payload.revisedProposalValue);
@@ -4379,20 +4402,19 @@ async function getProposalNumberDetail(proposalId, session) {
     requestId: detail.requestId || null,
     proposalRegistryId: proposalId
   });
-  if (!detail.revisionHistory.length && (detail.proposalValueRaw !== null || detail.bdiRaw !== null)) {
-    detail.revisionHistory = [{
-      createdAtLabel: detail.issueDate || "-",
-      entryTypeLabel: "Proposta inicial",
-      stageLabel: detail.stage || "-",
-      actorLabel: detail.manager || detail.seller || "Sistema",
-      proposalValueLabel: detail.proposalValueRaw === null || detail.proposalValueRaw === undefined
-        ? "-"
-        : Number(detail.proposalValueRaw).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-      bdiLabel: detail.bdiRaw === null || detail.bdiRaw === undefined
-        ? "-"
-        : `${Number(detail.bdiRaw).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
-      notes: "Valor e margem atuais da proposta."
-    }];
+  const hasInitialEntry = detail.revisionHistory.some((entry) => entry.entryType === "proposta_inicial" || entry.entryTypeLabel === "Proposta inicial");
+  if (!hasInitialEntry && (detail.proposalValueRaw !== null || detail.bdiRaw !== null)) {
+    detail.revisionHistory = [
+      buildInitialRevisionHistoryEntry({
+        createdAtLabel: detail.issueDate || "-",
+        stageLabel: detail.stage || "-",
+        actorLabel: detail.manager || detail.seller || "Sistema",
+        proposalValue: detail.proposalValueRaw,
+        bdi: detail.bdiRaw,
+        notes: "Valor e margem iniciais da proposta."
+      }),
+      ...detail.revisionHistory
+    ];
   }
   detail.history = negotiationDiaryEntries.map((entry) => ({
     title: "Diario de negociacao",
@@ -5183,20 +5205,19 @@ async function getRequestDetailFromDb(requestId, session) {
     requestId,
     proposalRegistryId: detailResult.rows[0].proposalRegistryId || null
   });
-  if (!negotiationValueHistory.length && detailResult.rows[0].proposalRegistryId && (detailResult.rows[0].proposalValue !== null || detailResult.rows[0].proposalBdi !== null)) {
-    negotiationValueHistory = [{
-      createdAtLabel: detailResult.rows[0].proposalIssueDate || "-",
-      entryTypeLabel: "Proposta inicial",
-      stageLabel: detailResult.rows[0].proposalWorkflowStageLabel || "-",
-      actorLabel: detailResult.rows[0].proposalManager || "Sistema",
-      proposalValueLabel: detailResult.rows[0].proposalValue === null || detailResult.rows[0].proposalValue === undefined
-        ? "-"
-        : Number(detailResult.rows[0].proposalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-      bdiLabel: detailResult.rows[0].proposalBdi === null || detailResult.rows[0].proposalBdi === undefined
-        ? "-"
-        : `${Number(detailResult.rows[0].proposalBdi).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
-      notes: "Valor e margem atuais da proposta vinculada."
-    }];
+  const hasInitialRevisionEntry = negotiationValueHistory.some((entry) => entry.entryType === "proposta_inicial" || entry.entryTypeLabel === "Proposta inicial");
+  if (!hasInitialRevisionEntry && detailResult.rows[0].proposalRegistryId && (detailResult.rows[0].proposalValue !== null || detailResult.rows[0].proposalBdi !== null)) {
+    negotiationValueHistory = [
+      buildInitialRevisionHistoryEntry({
+        createdAtLabel: detailResult.rows[0].proposalIssueDate || "-",
+        stageLabel: detailResult.rows[0].proposalWorkflowStageLabel || "-",
+        actorLabel: detailResult.rows[0].proposalManager || "Sistema",
+        proposalValue: detailResult.rows[0].proposalValue,
+        bdi: detailResult.rows[0].proposalBdi,
+        notes: "Valor e margem iniciais da proposta vinculada."
+      }),
+      ...negotiationValueHistory
+    ];
   }
 
   const servicesResult = await query(
