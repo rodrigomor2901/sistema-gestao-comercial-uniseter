@@ -1085,6 +1085,156 @@ function mapProposalStageCodeToStatus(nextStageCode, fallbackStatus = null) {
   return mapping[nextStageCode] || fallbackStatus || "Em negociacao";
 }
 
+function stageRequiresProposalRegistry(stageCode) {
+  return new Set([
+    "enviada_ao_vendedor",
+    "em_negociacao",
+    "proposta_aceita",
+    "perdida",
+    "cancelada",
+    "elaboracao_de_contrato",
+    "negociacao_de_clausulas",
+    "contrato_assinado"
+  ]).has(stageCode);
+}
+
+async function getRequestServiceScope(client, requestId) {
+  const result = await client.query(
+    `SELECT DISTINCT service_type AS "serviceType"
+     FROM request_services
+     WHERE request_id = $1
+       AND COALESCE(service_type, '') <> ''
+     ORDER BY "serviceType"`,
+    [requestId]
+  );
+
+  return result.rows
+    .map((row) => String(row.serviceType || "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+async function backfillMissingProposalRegistryForAdvancedRequests(client, session = null) {
+  const advancedStages = [
+    "enviada_ao_vendedor",
+    "em_negociacao",
+    "proposta_aceita",
+    "perdida",
+    "cancelada",
+    "elaboracao_de_contrato",
+    "negociacao_de_clausulas",
+    "contrato_assinado"
+  ];
+  const result = await client.query(
+    `SELECT
+       r.id,
+       r.request_number AS "requestNumber",
+       TO_CHAR(COALESCE(r.request_date, CURRENT_DATE), 'YYYY-MM-DD') AS "issueDate",
+       r.branch_name AS "branchName",
+       r.lead_source AS "leadSource",
+       r.seller_user_id AS "sellerUserId",
+       ws.code AS "stageCode",
+       UPPER(c.legal_name) AS "clientName",
+       c.industry_segment AS "industrySegment",
+       COALESCE(commercial_seller_user.name, seller_user.name) AS "managerName"
+     FROM requests r
+     JOIN clients c ON c.id = r.client_id
+     JOIN workflow_stages ws ON ws.id = r.current_stage_id
+     JOIN users seller_user ON seller_user.id = r.seller_user_id
+     LEFT JOIN commercial_records commercial_record ON commercial_record.request_id = r.id
+     LEFT JOIN users commercial_seller_user ON commercial_seller_user.id = commercial_record.seller_user_id
+     LEFT JOIN LATERAL (
+       SELECT id
+       FROM proposal_registry
+       WHERE request_id = r.id
+       ORDER BY id DESC
+       LIMIT 1
+     ) linked_proposal ON TRUE
+     WHERE ws.code = ANY($1::text[])
+       AND linked_proposal.id IS NULL
+     ORDER BY COALESCE(r.request_date, CURRENT_DATE), r.id`,
+    [advancedStages]
+  );
+
+  const created = [];
+
+  for (const row of result.rows) {
+    const nextResult = await client.query(
+      "SELECT COALESCE(MAX(proposal_sequence), 0)::int + 1 AS next_sequence FROM proposal_registry"
+    );
+    const proposalSequence = Number(nextResult.rows[0]?.next_sequence || 1);
+    const issueDate = row.issueDate || getSaoPauloIsoDate();
+    const proposalNumberDisplay = formatProposalNumberDisplay(proposalSequence, issueDate);
+    const proposalYear = Number(String(issueDate).slice(0, 4)) || new Date().getFullYear();
+    const serviceScope = await getRequestServiceScope(client, row.id);
+    const negotiationStatus = mapProposalStageCodeToStatus(row.stageCode, "Em negociacao");
+
+    const insertResult = await client.query(
+      `INSERT INTO proposal_registry (
+        proposal_sequence, proposal_year, proposal_number_display, issue_date,
+        manager_name, service_scope, document_type, client_name, contact_name,
+        phone, industry_segment, proposal_value, bdi, negotiation_status, notes,
+        request_id, crm_request_number, seller_user_id, branch_name, lead_source,
+        uploaded_file_name, uploaded_storage_path, uploaded_mime_type, uploaded_file_size,
+        imported_from_legacy, legacy_source_file
+      ) VALUES (
+        $1, $2, $3, $4::date,
+        $5, $6, 'PROPOSTA', $7, NULL,
+        NULL, $8, NULL, NULL, $9, $10,
+        $11, NULL, $12, $13, $14,
+        NULL, NULL, NULL, NULL,
+        FALSE, NULL
+      )
+      RETURNING id, proposal_number_display AS "proposalNumberDisplay"`,
+      [
+        proposalSequence,
+        proposalYear,
+        proposalNumberDisplay,
+        issueDate,
+        row.managerName || null,
+        serviceScope || null,
+        row.clientName || null,
+        row.industrySegment || null,
+        negotiationStatus,
+        `Numero gerado automaticamente para regularizar a solicitacao ${row.requestNumber}.`,
+        row.id,
+        row.sellerUserId || null,
+        row.branchName || null,
+        row.leadSource || null
+      ]
+    );
+
+    await logAuditEntry(client, {
+      actor: session || {
+        userId: null,
+        name: "Sistema",
+        email: null,
+        role: "administrador"
+      },
+      actionType: "proposal_number_backfilled",
+      entityType: "proposal_registry",
+      entityId: insertResult.rows[0].id,
+      requestId: row.id,
+      description: `Proposta ${insertResult.rows[0].proposalNumberDisplay} criada automaticamente para a solicitacao ${row.requestNumber}.`,
+      metadata: {
+        requestId: row.id,
+        requestNumber: row.requestNumber,
+        stageCode: row.stageCode
+      }
+    });
+
+    created.push({
+      requestId: row.id,
+      requestNumber: row.requestNumber,
+      proposalRegistryId: insertResult.rows[0].id,
+      proposalNumber: insertResult.rows[0].proposalNumberDisplay,
+      stageCode: row.stageCode
+    });
+  }
+
+  return created;
+}
+
 const WORKFLOW_STAGE_LABELS = {
   solicitacao_criada: "Solicitacao criada",
   em_triagem: "Em triagem",
@@ -5908,6 +6058,7 @@ async function saveCommercialRecord(payload, session) {
 
     const currentStageId = requestResult.rows[0].current_stage_id;
     const currentStageCode = requestResult.rows[0].current_stage_code;
+    const linkedProposalRegistryId = requestResult.rows[0].proposalRegistryId || null;
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
@@ -5919,6 +6070,10 @@ async function saveCommercialRecord(payload, session) {
     };
     if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
       throw new Error("Fluxo invalido para a etapa atual da negociacao.");
+    }
+
+    if (stageRequiresProposalRegistry(payload.nextStageCode) && !linkedProposalRegistryId) {
+      throw new Error("Gere e vincule o numero da proposta antes de enviar a solicitacao para recebimento ou negociacao.");
     }
 
     const existing = await client.query(
@@ -5995,7 +6150,7 @@ async function saveCommercialRecord(payload, session) {
       );
     }
 
-    if (requestResult.rows[0].proposalRegistryId) {
+    if (linkedProposalRegistryId) {
       await client.query(
         `UPDATE proposal_registry
          SET manager_name = COALESCE($2, manager_name),
@@ -6017,7 +6172,7 @@ async function saveCommercialRecord(payload, session) {
              updated_at = NOW()
          WHERE id = $1`,
         [
-          requestResult.rows[0].proposalRegistryId,
+          linkedProposalRegistryId,
           payload.sellerName || null,
           mapProposalStageCodeToStatus(payload.nextStageCode, payload.negotiationStatus || null),
           payload.commercialNotes || null,
@@ -6099,7 +6254,7 @@ async function saveCommercialRecord(payload, session) {
           email: session?.email || payload.sellerEmail
         },
         requestId,
-        proposalRegistryId: requestResult.rows[0].proposalRegistryId || null,
+        proposalRegistryId: linkedProposalRegistryId,
         fromStageCode: currentStageCode,
         toStageCode: payload.nextStageCode,
         requestNumber: requestResult.rows[0].request_number,
@@ -6110,7 +6265,7 @@ async function saveCommercialRecord(payload, session) {
 
     await createNegotiationDiaryEntry(client, payload, session, {
       requestId,
-      proposalRegistryId: requestResult.rows[0].proposalRegistryId || null,
+      proposalRegistryId: linkedProposalRegistryId,
       actorUserId: sellerUserId
     });
 
@@ -6281,6 +6436,10 @@ async function saveContractRecord(payload, session) {
     };
     if (allowedTransitions[currentStageCode] && !allowedTransitions[currentStageCode].includes(payload.nextStageCode)) {
       throw new Error("Fluxo invalido para a etapa atual do contratual.");
+    }
+
+    if (stageRequiresProposalRegistry(payload.nextStageCode) && !linkedProposalRegistryId) {
+      throw new Error("Gere e vincule o numero da proposta antes de iniciar o fluxo contratual.");
     }
 
     const values = [
@@ -6698,6 +6857,22 @@ const server = http.createServer(async (request, response) => {
       assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
       const items = await listWorkflowStageConfigurations();
       sendJson(response, 200, items);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/proposal-numbers/backfill-advanced-requests") {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "admin", "Seu usuario nao tem acesso ao modulo administrador.");
+      assertPermission(session, "manageUsers", "Acesso permitido apenas para Administrador.");
+      const items = await withTransaction(async (client) => (
+        backfillMissingProposalRegistryForAdvancedRequests(client, session)
+      ));
+      sendJson(response, 200, {
+        message: items.length
+          ? `${items.length} proposta(s) foram geradas para regularizar solicitacoes sem numero.`
+          : "Nenhuma solicitacao pendente de regularizacao foi encontrada.",
+        items
+      });
       return;
     }
 

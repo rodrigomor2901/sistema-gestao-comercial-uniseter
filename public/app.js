@@ -1942,7 +1942,7 @@ function populateProposalForm(detail) {
 }
 
 function populateCommercialForm(detail) {
-  document.getElementById("commercial-request-id").value = detail.requestId || "";
+  document.getElementById("commercial-request-id").value = detail.requestId || detail.id || "";
   document.getElementById("commercial-proposal-registry-id").value = detail.proposalRegistryId || "";
   document.getElementById("commercial-request-number").value = detail.requestNumber || "-";
   document.getElementById("commercial-proposal-number").value = detail.proposalNumber || "-";
@@ -1972,7 +1972,7 @@ function populateCommercialForm(detail) {
 }
 
 function populateContractForm(detail) {
-  document.getElementById("contract-request-id").value = detail.requestId || "";
+  document.getElementById("contract-request-id").value = detail.requestId || detail.id || "";
   document.getElementById("contract-proposal-registry-id").value = detail.proposalRegistryId || "";
   document.getElementById("contract-request-number").value = detail.requestNumber || "-";
   document.getElementById("contract-request-company").value = detail.company || detail.clientName || "";
