@@ -733,6 +733,10 @@ th {
   border-top: 1px solid #eee5d9;
 }
 
+.proposal-revision-head {
+  margin-top: 16px;
+}
+
 .field .k { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
 .field .v { font-weight: 700; font-size: 13px; }
 
@@ -1299,6 +1303,21 @@ input[type="file"] {
 .proposal-history-table th {
   overflow-wrap: anywhere;
 }
+
+.revision-history-table th:nth-child(1),
+.revision-history-table td:nth-child(1) { width: 14%; }
+.revision-history-table th:nth-child(2),
+.revision-history-table td:nth-child(2) { width: 14%; }
+.revision-history-table th:nth-child(3),
+.revision-history-table td:nth-child(3) { width: 14%; }
+.revision-history-table th:nth-child(4),
+.revision-history-table td:nth-child(4) { width: 15%; }
+.revision-history-table th:nth-child(5),
+.revision-history-table td:nth-child(5) { width: 13%; }
+.revision-history-table th:nth-child(6),
+.revision-history-table td:nth-child(6) { width: 12%; }
+.revision-history-table th:nth-child(7),
+.revision-history-table td:nth-child(7) { width: 18%; }
 
 .proposal-crm-row {
   cursor: pointer;

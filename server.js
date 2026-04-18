@@ -893,19 +893,15 @@ function deriveProposalTotals(payload = {}) {
   const explicitBdi = toNullableNumber(payload.bdi);
 
   const derivedValue = serviceLines.reduce((sum, item) => sum + Number(item.proposalValue || 0), 0);
-  const weightedMarginBase = serviceLines.reduce((sum, item) => {
-    if (item.proposalValue === null || item.bdi === null) return sum;
-    return sum + (Number(item.proposalValue) * Number(item.bdi));
-  }, 0);
-  const weightedValue = serviceLines.reduce((sum, item) => {
-    if (item.proposalValue === null || item.bdi === null) return sum;
-    return sum + Number(item.proposalValue);
-  }, 0);
+  const bdiItems = serviceLines.filter((item) => item.bdi !== null);
+  const averageBdi = bdiItems.length
+    ? bdiItems.reduce((sum, item) => sum + Number(item.bdi || 0), 0) / bdiItems.length
+    : null;
 
   return {
     serviceLines,
     proposalValue: explicitValue !== null ? explicitValue : (derivedValue > 0 ? derivedValue : null),
-    bdi: explicitBdi !== null ? explicitBdi : (weightedValue > 0 ? (weightedMarginBase / weightedValue) : null)
+    bdi: explicitBdi !== null ? explicitBdi : averageBdi
   };
 }
 
@@ -1691,6 +1687,21 @@ async function ensureNegotiationDiaryTable() {
   `);
 
   await query(`
+    ALTER TABLE negotiation_diary_entries
+    ADD COLUMN IF NOT EXISTS revised_proposal_value NUMERIC(18,2)
+  `);
+
+  await query(`
+    ALTER TABLE negotiation_diary_entries
+    ADD COLUMN IF NOT EXISTS revised_bdi NUMERIC(12,4)
+  `);
+
+  await query(`
+    ALTER TABLE negotiation_diary_entries
+    ADD COLUMN IF NOT EXISTS stage_code VARCHAR(80)
+  `);
+
+  await query(`
     CREATE INDEX IF NOT EXISTS idx_negotiation_diary_request_id
     ON negotiation_diary_entries(request_id, contact_date DESC, id DESC)
   `);
@@ -1698,6 +1709,35 @@ async function ensureNegotiationDiaryTable() {
   await query(`
     CREATE INDEX IF NOT EXISTS idx_negotiation_diary_proposal_id
     ON negotiation_diary_entries(proposal_registry_id, contact_date DESC, id DESC)
+  `);
+}
+
+async function ensureNegotiationValueHistoryTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS negotiation_value_history (
+      id BIGSERIAL PRIMARY KEY,
+      request_id BIGINT REFERENCES requests(id) ON DELETE CASCADE,
+      proposal_registry_id BIGINT REFERENCES proposal_registry(id) ON DELETE CASCADE,
+      actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      actor_name VARCHAR(150),
+      actor_email VARCHAR(255),
+      stage_code VARCHAR(80),
+      entry_type VARCHAR(80) NOT NULL DEFAULT 'revisao_negociacao',
+      proposal_value NUMERIC(18,2),
+      bdi NUMERIC(12,4),
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_negotiation_value_history_request_id
+    ON negotiation_value_history(request_id, created_at DESC, id DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_negotiation_value_history_proposal_id
+    ON negotiation_value_history(proposal_registry_id, created_at DESC, id DESC)
   `);
 }
 
@@ -1978,10 +2018,22 @@ function composeNegotiationDiaryNote(entry) {
   const probabilityLevel = String(entry.probabilityLevel || "").trim();
   const commercialNotes = String(entry.commercialNotes || "").trim();
   const requestedAdjustments = String(entry.requestedAdjustments || "").trim();
+  const revisedProposalValue = entry.revisedProposalValue === null || entry.revisedProposalValue === undefined
+    ? null
+    : Number(entry.revisedProposalValue);
+  const revisedBdi = entry.revisedBdi === null || entry.revisedBdi === undefined
+    ? null
+    : Number(entry.revisedBdi);
 
   if (summary) parts.push(summary);
   if (nextAction) parts.push(`Proxima acao: ${nextAction}`);
   if (probabilityLevel) parts.push(`Probabilidade: ${probabilityLevel}`);
+  if (revisedProposalValue !== null && Number.isFinite(revisedProposalValue)) {
+    parts.push(`Valor revisado: ${revisedProposalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
+  }
+  if (revisedBdi !== null && Number.isFinite(revisedBdi)) {
+    parts.push(`Margem revisada: ${revisedBdi.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`);
+  }
   if (commercialNotes && commercialNotes !== summary) parts.push(`Observacoes: ${commercialNotes}`);
   if (requestedAdjustments) parts.push(`Ajustes solicitados: ${requestedAdjustments}`);
 
@@ -1996,7 +2048,9 @@ function buildHistoryActorLabel(actorName, actorEmail) {
 
 async function createNegotiationDiaryEntry(client, payload, session, context = {}) {
   const summary = String(payload.negotiationSummary || "").trim();
-  if (!summary) return;
+  const revisedProposalValue = toNullableNumber(payload.revisedProposalValue);
+  const revisedBdi = toNullableNumber(payload.revisedBdi);
+  if (!summary && revisedProposalValue === null && revisedBdi === null) return;
 
   await client.query(
     `INSERT INTO negotiation_diary_entries (
@@ -2010,9 +2064,12 @@ async function createNegotiationDiaryEntry(client, payload, session, context = {
       next_action,
       probability_level,
       commercial_notes,
-      requested_adjustments
+      requested_adjustments,
+      revised_proposal_value,
+      revised_bdi,
+      stage_code
     ) VALUES (
-      $1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10
+      $1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12, $13
     )`,
     [
       context.requestId || null,
@@ -2024,21 +2081,26 @@ async function createNegotiationDiaryEntry(client, payload, session, context = {
       payload.nextAction || null,
       payload.probabilityLevel || null,
       payload.commercialNotes || null,
-      payload.requestedAdjustments || null
+      payload.requestedAdjustments || null,
+      revisedProposalValue,
+      revisedBdi,
+      payload.nextStageCode || context.stageCode || null
     ]
   );
 }
 
 async function listNegotiationDiaryEntries(filters = {}) {
-  const clauses = [];
   const values = [];
+  const clauses = [];
 
-  if (filters.requestId) {
+  if (filters.requestId && filters.proposalRegistryId) {
+    const requestIndex = values.push(filters.requestId);
+    const proposalIndex = values.push(filters.proposalRegistryId);
+    clauses.push(`(request_id = $${requestIndex} OR proposal_registry_id = $${proposalIndex})`);
+  } else if (filters.requestId) {
     const index = values.push(filters.requestId);
     clauses.push(`request_id = $${index}`);
-  }
-
-  if (filters.proposalRegistryId) {
+  } else if (filters.proposalRegistryId) {
     const index = values.push(filters.proposalRegistryId);
     clauses.push(`proposal_registry_id = $${index}`);
   }
@@ -2058,7 +2120,10 @@ async function listNegotiationDiaryEntries(filters = {}) {
        next_action AS "nextAction",
        probability_level AS "probabilityLevel",
        commercial_notes AS "commercialNotes",
-       requested_adjustments AS "requestedAdjustments"
+       requested_adjustments AS "requestedAdjustments",
+       revised_proposal_value AS "revisedProposalValue",
+       revised_bdi AS "revisedBdi",
+       stage_code AS "stageCode"
      FROM negotiation_diary_entries
      WHERE ${clauses.join(" AND ")}
      ORDER BY contact_date DESC, id DESC`,
@@ -2066,6 +2131,93 @@ async function listNegotiationDiaryEntries(filters = {}) {
   );
 
   return result.rows;
+}
+
+async function createNegotiationValueHistoryEntry(client, payload = {}, session = null, context = {}) {
+  const proposalValue = toNullableNumber(payload.proposalValue);
+  const bdi = toNullableNumber(payload.bdi);
+  if (proposalValue === null && bdi === null) return;
+
+  await client.query(
+    `INSERT INTO negotiation_value_history (
+      request_id,
+      proposal_registry_id,
+      actor_user_id,
+      actor_name,
+      actor_email,
+      stage_code,
+      entry_type,
+      proposal_value,
+      bdi,
+      notes
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    )`,
+    [
+      context.requestId || null,
+      context.proposalRegistryId || null,
+      session?.userId || context.actorUserId || null,
+      session?.name || payload.actorName || payload.sellerName || payload.managerName || null,
+      session?.email || payload.actorEmail || payload.sellerEmail || null,
+      context.stageCode || payload.stageCode || null,
+      context.entryType || payload.entryType || "revisao_negociacao",
+      proposalValue,
+      bdi,
+      payload.notes || null
+    ]
+  );
+}
+
+async function listNegotiationValueHistoryEntries(filters = {}) {
+  const values = [];
+  const clauses = [];
+
+  if (filters.requestId && filters.proposalRegistryId) {
+    const requestIndex = values.push(filters.requestId);
+    const proposalIndex = values.push(filters.proposalRegistryId);
+    clauses.push(`(request_id = $${requestIndex} OR proposal_registry_id = $${proposalIndex})`);
+  } else if (filters.requestId) {
+    const index = values.push(filters.requestId);
+    clauses.push(`request_id = $${index}`);
+  } else if (filters.proposalRegistryId) {
+    const index = values.push(filters.proposalRegistryId);
+    clauses.push(`proposal_registry_id = $${index}`);
+  }
+
+  if (!clauses.length) return [];
+
+  const result = await query(
+    `SELECT
+       id,
+       request_id AS "requestId",
+       proposal_registry_id AS "proposalRegistryId",
+       actor_name AS "actorName",
+       actor_email AS "actorEmail",
+       stage_code AS "stageCode",
+       entry_type AS "entryType",
+       proposal_value AS "proposalValue",
+       bdi,
+       notes,
+       created_at AS "createdAt",
+       TO_CHAR(created_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS "createdAtLabel"
+     FROM negotiation_value_history
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY created_at DESC, id DESC`,
+    values
+  );
+
+  return result.rows.map((row) => ({
+    ...row,
+    actorLabel: buildHistoryActorLabel(row.actorName, row.actorEmail),
+    stageLabel: row.stageCode ? getWorkflowStageLabel(row.stageCode) : "-",
+    entryTypeLabel: row.entryType === "proposta_inicial" ? "Proposta inicial" : "Revisão comercial",
+    proposalValueLabel: row.proposalValue === null || row.proposalValue === undefined
+      ? "-"
+      : Number(row.proposalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    bdiLabel: row.bdi === null || row.bdi === undefined
+      ? "-"
+      : `${Number(row.bdi).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+  }));
 }
 
 async function collectRequestNotificationRecipientIds(client, requestId, extraUserIds = []) {
@@ -3991,118 +4143,131 @@ async function saveProposalRegistryServiceLines(client, proposalRegistryId, serv
   }
 }
 
-async function createProposalNumber(payload, session) {
-  return withTransaction(async (client) => {
-    const issueDate = payload.issueDate || getSaoPauloIsoDate();
-    const requestId = payload.requestId ? Number(payload.requestId) : null;
-    const totals = deriveProposalTotals(payload);
-    if (!payload.clientName && !requestId) {
-      throw new Error("Informe o cliente ou vincule a uma solicitacao.");
-    }
+async function createProposalNumberRecord(client, payload, session) {
+  const issueDate = payload.issueDate || getSaoPauloIsoDate();
+  const requestId = payload.requestId ? Number(payload.requestId) : null;
+  const totals = deriveProposalTotals(payload);
+  if (!payload.clientName && !requestId) {
+    throw new Error("Informe o cliente ou vincule a uma solicitacao.");
+  }
 
-      let resolvedClientName = toUpperOrNull(payload.clientName);
-    let resolvedBranch = payload.branchName || null;
-    let resolvedSellerUserId = session?.userId || null;
+  let resolvedClientName = toUpperOrNull(payload.clientName);
+  let resolvedBranch = payload.branchName || null;
+  let resolvedSellerUserId = session?.userId || null;
 
-    if (requestId) {
-      const requestResult = await client.query(
-        `SELECT
-           r.id,
-           r.request_number AS "requestNumber",
-           r.branch_name AS "branchName",
-           r.seller_user_id AS "sellerUserId",
-           UPPER(c.legal_name) AS "clientName"
-         FROM requests r
-         JOIN clients c ON c.id = r.client_id
-         WHERE r.id = $1`,
-        [requestId]
-      );
-
-      if (!requestResult.rows[0]) {
-        throw new Error("Solicitacao vinculada nao encontrada.");
-      }
-
-      resolvedClientName = resolvedClientName || requestResult.rows[0].clientName;
-      resolvedBranch = resolvedBranch || requestResult.rows[0].branchName;
-      resolvedSellerUserId = requestResult.rows[0].sellerUserId || resolvedSellerUserId;
-    }
-
-    const nextResult = await client.query(
-      "SELECT COALESCE(MAX(proposal_sequence), 0)::int + 1 AS next_sequence FROM proposal_registry"
-    );
-    const proposalSequence = nextResult.rows[0].next_sequence;
-    const proposalNumberDisplay = formatProposalNumberDisplay(proposalSequence, issueDate);
-    const proposalYear = Number(String(issueDate).slice(0, 4)) || new Date().getFullYear();
-    const managerName = payload.managerName || session?.name || null;
-    const uploadedStoragePath = saveModuleFile("proposal-registry", "proposta", payload.uploadedFile);
-
-    const insertResult = await client.query(
-      `INSERT INTO proposal_registry (
-        proposal_sequence, proposal_year, proposal_number_display, issue_date,
-        manager_name, service_scope, document_type, client_name, contact_name,
-        phone, industry_segment, proposal_value, bdi, negotiation_status, notes,
-        request_id, crm_request_number, seller_user_id, branch_name, lead_source,
-        uploaded_file_name, uploaded_storage_path, uploaded_mime_type, uploaded_file_size,
-        imported_from_legacy, legacy_source_file
-      ) VALUES (
-        $1, $2, $3, $4::date,
-        $5, $6, $7, $8, $9,
-        $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20,
-        $21, $22, $23, $24,
-        FALSE, NULL
-      )
-      RETURNING id, proposal_number_display AS "proposalNumberDisplay", proposal_sequence AS "proposalSequence"`,
-      [
-        proposalSequence,
-        proposalYear,
-        proposalNumberDisplay,
-        issueDate,
-        managerName,
-        payload.serviceScope || null,
-        payload.documentType || "PROPOSTA",
-        resolvedClientName,
-        payload.contactName || null,
-        payload.phone || null,
-        payload.industrySegment || null,
-        totals.proposalValue,
-        totals.bdi,
-        payload.status || "Gerado",
-        payload.notes || null,
-        requestId,
-        requestId ? null : await generateProposalCrmRequestNumber(client, issueDate),
-        resolvedSellerUserId,
-        resolvedBranch,
-        payload.leadSource || null,
-        payload.uploadedFile?.fileName || null,
-        uploadedStoragePath,
-        payload.uploadedFile?.mimeType || null,
-        payload.uploadedFile?.fileSize || null
-      ]
+  if (requestId) {
+    const requestResult = await client.query(
+      `SELECT
+         r.id,
+         r.request_number AS "requestNumber",
+         r.branch_name AS "branchName",
+         r.seller_user_id AS "sellerUserId",
+         UPPER(c.legal_name) AS "clientName"
+       FROM requests r
+       JOIN clients c ON c.id = r.client_id
+       WHERE r.id = $1`,
+      [requestId]
     );
 
-    await saveProposalRegistryServiceLines(client, insertResult.rows[0].id, totals.serviceLines);
+    if (!requestResult.rows[0]) {
+      throw new Error("Solicitacao vinculada nao encontrada.");
+    }
 
-    await logAuditEntry(client, {
-      actor: session,
-      actionType: "proposal_number_created",
-      entityType: "proposal_registry",
-      entityId: insertResult.rows[0].id,
+    resolvedClientName = resolvedClientName || requestResult.rows[0].clientName;
+    resolvedBranch = resolvedBranch || requestResult.rows[0].branchName;
+    resolvedSellerUserId = requestResult.rows[0].sellerUserId || resolvedSellerUserId;
+  }
+
+  const nextResult = await client.query(
+    "SELECT COALESCE(MAX(proposal_sequence), 0)::int + 1 AS next_sequence FROM proposal_registry"
+  );
+  const proposalSequence = nextResult.rows[0].next_sequence;
+  const proposalNumberDisplay = formatProposalNumberDisplay(proposalSequence, issueDate);
+  const proposalYear = Number(String(issueDate).slice(0, 4)) || new Date().getFullYear();
+  const managerName = payload.managerName || session?.name || null;
+  const uploadedStoragePath = saveModuleFile("proposal-registry", "proposta", payload.uploadedFile);
+
+  const insertResult = await client.query(
+    `INSERT INTO proposal_registry (
+      proposal_sequence, proposal_year, proposal_number_display, issue_date,
+      manager_name, service_scope, document_type, client_name, contact_name,
+      phone, industry_segment, proposal_value, bdi, negotiation_status, notes,
+      request_id, crm_request_number, seller_user_id, branch_name, lead_source,
+      uploaded_file_name, uploaded_storage_path, uploaded_mime_type, uploaded_file_size,
+      imported_from_legacy, legacy_source_file
+    ) VALUES (
+      $1, $2, $3, $4::date,
+      $5, $6, $7, $8, $9,
+      $10, $11, $12, $13, $14, $15,
+      $16, $17, $18, $19, $20,
+      $21, $22, $23, $24,
+      FALSE, NULL
+    )
+    RETURNING id, proposal_number_display AS "proposalNumberDisplay", proposal_sequence AS "proposalSequence"`,
+    [
+      proposalSequence,
+      proposalYear,
+      proposalNumberDisplay,
+      issueDate,
+      managerName,
+      payload.serviceScope || null,
+      payload.documentType || "PROPOSTA",
+      resolvedClientName,
+      payload.contactName || null,
+      payload.phone || null,
+      payload.industrySegment || null,
+      totals.proposalValue,
+      totals.bdi,
+      payload.status || "Gerado",
+      payload.notes || null,
+      requestId,
+      requestId ? null : await generateProposalCrmRequestNumber(client, issueDate),
+      resolvedSellerUserId,
+      resolvedBranch,
+      payload.leadSource || null,
+      payload.uploadedFile?.fileName || null,
+      uploadedStoragePath,
+      payload.uploadedFile?.mimeType || null,
+      payload.uploadedFile?.fileSize || null
+    ]
+  );
+
+  await saveProposalRegistryServiceLines(client, insertResult.rows[0].id, totals.serviceLines);
+
+  await logAuditEntry(client, {
+    actor: session,
+    actionType: "proposal_number_created",
+    entityType: "proposal_registry",
+    entityId: insertResult.rows[0].id,
+    requestId: requestId || null,
+    description: `Proposta ${insertResult.rows[0].proposalNumberDisplay} gerado.`,
+    metadata: {
+      proposalSequence,
       requestId: requestId || null,
-      description: `Proposta ${insertResult.rows[0].proposalNumberDisplay} gerado.`,
-      metadata: {
-        proposalSequence,
-        requestId: requestId || null,
-        clientName: resolvedClientName
-      }
-    });
-
-    return {
-      id: insertResult.rows[0].id,
-      proposalNumberDisplay: insertResult.rows[0].proposalNumberDisplay,
-      proposalSequence: insertResult.rows[0].proposalSequence
-    };
+      clientName: resolvedClientName
+    }
   });
+
+  await createNegotiationValueHistoryEntry(client, {
+    proposalValue: totals.proposalValue,
+    bdi: totals.bdi,
+    notes: payload.notes || "Proposta inicial registrada."
+  }, session, {
+    requestId: requestId || null,
+    proposalRegistryId: insertResult.rows[0].id,
+    stageCode: "proposta_finalizada",
+    entryType: "proposta_inicial"
+  });
+
+  return {
+    id: insertResult.rows[0].id,
+    proposalNumberDisplay: insertResult.rows[0].proposalNumberDisplay,
+    proposalSequence: insertResult.rows[0].proposalSequence
+  };
+}
+
+async function createProposalNumber(payload, session) {
+  return withTransaction(async (client) => createProposalNumberRecord(client, payload, session));
 }
 
 async function getProposalRegistryFile(proposalId, session) {
@@ -4206,7 +4371,29 @@ async function getProposalNumberDetail(proposalId, session) {
   );
 
   detail.serviceLines = serviceLineResult.rows;
-  const negotiationDiaryEntries = await listNegotiationDiaryEntries({ proposalRegistryId: proposalId });
+  const negotiationDiaryEntries = await listNegotiationDiaryEntries({
+    requestId: detail.requestId || null,
+    proposalRegistryId: proposalId
+  });
+  detail.revisionHistory = await listNegotiationValueHistoryEntries({
+    requestId: detail.requestId || null,
+    proposalRegistryId: proposalId
+  });
+  if (!detail.revisionHistory.length && (detail.proposalValueRaw !== null || detail.bdiRaw !== null)) {
+    detail.revisionHistory = [{
+      createdAtLabel: detail.issueDate || "-",
+      entryTypeLabel: "Proposta inicial",
+      stageLabel: detail.stage || "-",
+      actorLabel: detail.manager || detail.seller || "Sistema",
+      proposalValueLabel: detail.proposalValueRaw === null || detail.proposalValueRaw === undefined
+        ? "-"
+        : Number(detail.proposalValueRaw).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      bdiLabel: detail.bdiRaw === null || detail.bdiRaw === undefined
+        ? "-"
+        : `${Number(detail.bdiRaw).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+      notes: "Valor e margem atuais da proposta."
+    }];
+  }
   detail.history = negotiationDiaryEntries.map((entry) => ({
     title: "Diario de negociacao",
     meta: `${entry.contactDateLabel} - ${buildHistoryActorLabel(entry.actorName, entry.actorEmail)}`,
@@ -4891,6 +5078,7 @@ async function getRequestDetailFromDb(requestId, session) {
        ${buildProposalCommercialStageLabelSql("linked_proposal")} AS "proposalCommercialStageLabel",
        linked_proposal.manager_name AS "proposalManager",
        linked_proposal.proposal_value AS "proposalValue",
+       linked_proposal.bdi AS "proposalBdi",
        triage_user.name AS "triageOwnerName",
        triage_user.email AS "triageOwnerEmail",
        proposal_user.name AS "proposalOwnerName",
@@ -4947,7 +5135,7 @@ async function getRequestDetailFromDb(requestId, session) {
      LEFT JOIN loss_reasons ON loss_reasons.id = r.lost_reason_id
      LEFT JOIN cancel_reasons ON cancel_reasons.id = r.cancel_reason_id
      LEFT JOIN LATERAL (
-       SELECT id, proposal_number_display, issue_date, negotiation_status, manager_name, proposal_value
+       SELECT id, proposal_number_display, issue_date, negotiation_status, manager_name, proposal_value, bdi
        FROM proposal_registry
        WHERE request_id = r.id
        ORDER BY id DESC
@@ -4987,7 +5175,29 @@ async function getRequestDetailFromDb(requestId, session) {
     [requestId]
   );
 
-  const negotiationDiaryEntries = await listNegotiationDiaryEntries({ requestId });
+  const negotiationDiaryEntries = await listNegotiationDiaryEntries({
+    requestId,
+    proposalRegistryId: detailResult.rows[0].proposalRegistryId || null
+  });
+  let negotiationValueHistory = await listNegotiationValueHistoryEntries({
+    requestId,
+    proposalRegistryId: detailResult.rows[0].proposalRegistryId || null
+  });
+  if (!negotiationValueHistory.length && detailResult.rows[0].proposalRegistryId && (detailResult.rows[0].proposalValue !== null || detailResult.rows[0].proposalBdi !== null)) {
+    negotiationValueHistory = [{
+      createdAtLabel: detailResult.rows[0].proposalIssueDate || "-",
+      entryTypeLabel: "Proposta inicial",
+      stageLabel: detailResult.rows[0].proposalWorkflowStageLabel || "-",
+      actorLabel: detailResult.rows[0].proposalManager || "Sistema",
+      proposalValueLabel: detailResult.rows[0].proposalValue === null || detailResult.rows[0].proposalValue === undefined
+        ? "-"
+        : Number(detailResult.rows[0].proposalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      bdiLabel: detailResult.rows[0].proposalBdi === null || detailResult.rows[0].proposalBdi === undefined
+        ? "-"
+        : `${Number(detailResult.rows[0].proposalBdi).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+      notes: "Valor e margem atuais da proposta vinculada."
+    }];
+  }
 
   const servicesResult = await query(
     `SELECT service_type AS "serviceType"
@@ -5092,6 +5302,7 @@ async function getRequestDetailFromDb(requestId, session) {
     benefits: benefitsResult.rows,
     posts: postsResult.rows,
     equipments: equipmentsResult.rows,
+    revisionHistory: negotiationValueHistory,
     history: [...historyResult.rows.map((row) => ({
       title: row.title,
       meta: row.meta,
@@ -5673,6 +5884,8 @@ async function saveProposalRecord(payload, session) {
 
     const currentStageId = requestResult.rows[0].current_stage_id;
     const currentStageCode = requestResult.rows[0].current_stage_code;
+    let linkedProposalRegistryId = requestResult.rows[0].proposalRegistryId || null;
+    let linkedProposalNumber = requestResult.rows[0].proposalNumber || null;
     const nextOwnerId = payload.nextStageCode === "enviada_ao_vendedor"
       ? requestResult.rows[0].seller_user_id
       : (proposalOwnerId || triageOwnerId || requestResult.rows[0].current_owner_user_id);
@@ -5690,14 +5903,35 @@ async function saveProposalRecord(payload, session) {
       throw new Error("Fluxo invalido para a etapa atual da proposta.");
     }
 
-    if (payload.nextStageCode === "proposta_finalizada" && !requestResult.rows[0].proposalRegistryId) {
-      throw new Error("Gere e vincule o numero da proposta antes de finalizar a proposta.");
-    }
-
     const existing = await client.query(
-      "SELECT id FROM proposal_records WHERE request_id = $1",
+      "SELECT id, final_pdf_attachment_id FROM proposal_records WHERE request_id = $1",
       [requestId]
     );
+
+    if ((payload.nextStageCode === "proposta_finalizada" || payload.nextStageCode === "enviada_ao_vendedor") && !linkedProposalRegistryId) {
+      const generatedProposal = await createProposalNumberRecord(client, {
+        requestId,
+        issueDate: payload.expectedCompletionDate || getSaoPauloIsoDate(),
+        managerName: payload.proposalOwnerName || payload.triageOwnerName || session?.name || null,
+        clientName: null,
+        documentType: "PROPOSTA",
+        branchName: null,
+        leadSource: null,
+        status: mapProposalStageCodeToStatus(payload.nextStageCode, "Proposta finalizada"),
+        serviceScope: await getRequestServiceScope(client, requestId),
+        contactName: null,
+        phone: null,
+        industrySegment: null,
+        proposalValue: null,
+        bdi: null,
+        serviceLines: [],
+        notes: payload.internalNotes || payload.triageNote || "Numero gerado automaticamente na finalizacao da proposta.",
+        uploadedFile: null
+      }, session);
+      linkedProposalRegistryId = generatedProposal.id;
+      linkedProposalNumber = generatedProposal.proposalNumberDisplay;
+    }
+
     const finalPdfAttachmentIds = await createAttachmentRecords(client, {
       requestId,
       uploadedByUserId: triageOwnerId || proposalOwnerId,
@@ -5712,6 +5946,12 @@ async function saveProposalRecord(payload, session) {
       file: payload.proposalFinalPdf,
       description: "Arquivo final da proposta"
     });
+    const hasExistingFinalPdf = Boolean(existing.rows[0]?.final_pdf_attachment_id);
+    const hasNewFinalPdf = Boolean(finalPdfAttachmentId);
+
+    if (payload.nextStageCode === "enviada_ao_vendedor" && !hasExistingFinalPdf && !hasNewFinalPdf) {
+      throw new Error("Anexe pelo menos um arquivo da proposta final em PDF antes de enviar para Recebimento de Proposta.");
+    }
     await createAttachmentRecords(client, {
       requestId,
       uploadedByUserId: triageOwnerId || proposalOwnerId,
@@ -5786,6 +6026,21 @@ async function saveProposalRecord(payload, session) {
       );
     }
 
+    if (linkedProposalRegistryId) {
+      await client.query(
+        `UPDATE proposal_registry
+         SET manager_name = COALESCE($2, manager_name),
+             negotiation_status = $3,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [
+          linkedProposalRegistryId,
+          payload.proposalOwnerName || payload.triageOwnerName || null,
+          mapProposalStageCodeToStatus(payload.nextStageCode, "Proposta finalizada")
+        ]
+      );
+    }
+
     await client.query(
       `UPDATE requests
        SET current_stage_id = $2,
@@ -5852,11 +6107,11 @@ async function saveProposalRecord(payload, session) {
           email: session?.email || payload.triageOwnerEmail
         },
         requestId,
-        proposalRegistryId: requestResult.rows[0].proposalRegistryId || null,
+        proposalRegistryId: linkedProposalRegistryId,
         fromStageCode: currentStageCode,
         toStageCode: payload.nextStageCode,
         requestNumber: requestResult.rows[0].request_number,
-        proposalNumber: requestResult.rows[0].proposalNumber || null,
+        proposalNumber: linkedProposalNumber,
         company: payload.clientName || null,
         note: payload.triageNote || "Triagem atualizada."
       });
@@ -5926,12 +6181,22 @@ async function saveCommercialRecord(payload, session) {
 	        `SELECT
 	           ${buildProposalStageCodeSql("pr")} AS current_stage_code,
 	           pr.proposal_number_display AS "proposalNumber",
-	           pr.client_name AS "clientName"
+	           pr.client_name AS "clientName",
+             pr.proposal_value AS "proposalValue",
+             pr.bdi AS "bdi"
 	         FROM proposal_registry pr
 	         WHERE pr.id = $1`,
 	        [proposalRegistryId]
 	      );
 	      const currentStageCode = proposalStageResult.rows[0]?.current_stage_code || "em_negociacao";
+      const revisedProposalValue = toNullableNumber(payload.revisedProposalValue);
+      const revisedBdi = toNullableNumber(payload.revisedBdi);
+      const resolvedProposalValue = revisedProposalValue !== null
+        ? revisedProposalValue
+        : toNullableNumber(proposalStageResult.rows[0]?.proposalValue);
+      const resolvedBdi = revisedBdi !== null
+        ? revisedBdi
+        : toNullableNumber(proposalStageResult.rows[0]?.bdi);
       assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
       assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
       const allowedTransitions = {
@@ -5962,6 +6227,8 @@ async function saveCommercialRecord(payload, session) {
               accepted_scope = $15,
               accepted_conditions = $16,
               accepted_note = $17,
+              proposal_value = COALESCE($18, proposal_value),
+              bdi = COALESCE($19, bdi),
               updated_at = NOW()
           WHERE id = $1`,
         [
@@ -5981,13 +6248,27 @@ async function saveCommercialRecord(payload, session) {
           payload.acceptedAt || null,
           payload.acceptedScope || null,
           payload.acceptedConditions || null,
-          payload.acceptedNote || null
+          payload.acceptedNote || null,
+          resolvedProposalValue,
+          resolvedBdi
         ]
       );
 
       await createNegotiationDiaryEntry(client, payload, session, {
         proposalRegistryId,
-        actorUserId: sellerUserId
+        actorUserId: sellerUserId,
+        stageCode: payload.nextStageCode || currentStageCode
+      });
+
+      await createNegotiationValueHistoryEntry(client, {
+        proposalValue: revisedProposalValue,
+        bdi: revisedBdi,
+        notes: payload.negotiationSummary || payload.commercialNotes || payload.nextAction || null
+      }, session, {
+        proposalRegistryId,
+        actorUserId: sellerUserId,
+        stageCode: payload.nextStageCode || currentStageCode,
+        entryType: "revisao_negociacao"
       });
 
 	      await logAuditEntry(client, {
@@ -6042,11 +6323,13 @@ async function saveCommercialRecord(payload, session) {
 	         r.current_owner_user_id,
            r.seller_user_id,
 	         ws.code AS current_stage_code,
-         linked_proposal.id AS "proposalRegistryId"
+         linked_proposal.id AS "proposalRegistryId",
+         linked_proposal.proposal_value AS "proposalValue",
+         linked_proposal.bdi AS "proposalBdi"
        FROM requests r
        JOIN workflow_stages ws ON ws.id = r.current_stage_id
        LEFT JOIN LATERAL (
-         SELECT id
+         SELECT id, proposal_value, bdi
          FROM proposal_registry
          WHERE request_id = r.id
          ORDER BY id DESC
@@ -6059,6 +6342,8 @@ async function saveCommercialRecord(payload, session) {
     const currentStageId = requestResult.rows[0].current_stage_id;
     const currentStageCode = requestResult.rows[0].current_stage_code;
     const linkedProposalRegistryId = requestResult.rows[0].proposalRegistryId || null;
+    const revisedProposalValue = toNullableNumber(payload.revisedProposalValue);
+    const revisedBdi = toNullableNumber(payload.revisedBdi);
     assertStageAccess(session, currentStageCode, "Seu usuário não tem acesso à etapa atual da negociação.");
     assertStageAccess(session, payload.nextStageCode, "Seu usuário não pode mover para a etapa informada.");
     const allowedTransitions = {
@@ -6169,6 +6454,8 @@ async function saveCommercialRecord(payload, session) {
              accepted_scope = $15,
              accepted_conditions = $16,
              accepted_note = $17,
+             proposal_value = COALESCE($18, proposal_value),
+             bdi = COALESCE($19, bdi),
              updated_at = NOW()
          WHERE id = $1`,
         [
@@ -6188,7 +6475,9 @@ async function saveCommercialRecord(payload, session) {
           payload.acceptedAt || null,
           payload.acceptedScope || null,
           payload.acceptedConditions || null,
-          payload.acceptedNote || null
+          payload.acceptedNote || null,
+          revisedProposalValue !== null ? revisedProposalValue : toNullableNumber(requestResult.rows[0].proposalValue),
+          revisedBdi !== null ? revisedBdi : toNullableNumber(requestResult.rows[0].proposalBdi)
         ]
       );
     }
@@ -6266,7 +6555,20 @@ async function saveCommercialRecord(payload, session) {
     await createNegotiationDiaryEntry(client, payload, session, {
       requestId,
       proposalRegistryId: linkedProposalRegistryId,
-      actorUserId: sellerUserId
+      actorUserId: sellerUserId,
+      stageCode: payload.nextStageCode || currentStageCode
+    });
+
+    await createNegotiationValueHistoryEntry(client, {
+      proposalValue: revisedProposalValue,
+      bdi: revisedBdi,
+      notes: payload.negotiationSummary || payload.commercialNotes || payload.nextAction || null
+    }, session, {
+      requestId,
+      proposalRegistryId: linkedProposalRegistryId,
+      actorUserId: sellerUserId,
+      stageCode: payload.nextStageCode || currentStageCode,
+      entryType: "revisao_negociacao"
     });
 
     await logAuditEntry(client, {
@@ -7274,6 +7576,7 @@ ensurePasswordColumn()
   .then(() => ensureRequestStructureDeduplication())
   .then(() => ensureAuditLogTable())
   .then(() => ensureNegotiationDiaryTable())
+  .then(() => ensureNegotiationValueHistoryTable())
   .then(() => ensureNotificationTable())
   .then(() => ensureBaseAccessData())
   .then(() => {

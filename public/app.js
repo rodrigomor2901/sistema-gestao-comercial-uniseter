@@ -552,10 +552,12 @@ function proposalNumberLink(item) {
 function renderProposalSummary(item) {
   const card = document.getElementById("proposal-summary-card");
   const container = document.getElementById("proposal-summary");
+  const historyContainer = document.getElementById("proposal-revision-history");
 
   if (!item?.proposalNumber) {
     card.style.display = "none";
     container.innerHTML = "";
+    if (historyContainer) historyContainer.innerHTML = "";
     return;
   }
 
@@ -574,6 +576,40 @@ function renderProposalSummary(item) {
       <div class="v">${value}</div>
     </div>
   `).join("");
+
+  if (historyContainer) {
+    const rows = item.revisionHistory || [];
+    historyContainer.innerHTML = rows.length
+      ? `
+        <table class="proposal-history-table revision-history-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Origem</th>
+              <th>Etapa</th>
+              <th>Responsável</th>
+              <th>Valor</th>
+              <th>Margem</th>
+              <th>Observações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${row.createdAtLabel || "-"}</td>
+                <td>${row.entryTypeLabel || "-"}</td>
+                <td>${row.stageLabel || "-"}</td>
+                <td>${row.actorLabel || "-"}</td>
+                <td>${row.proposalValueLabel || "-"}</td>
+                <td>${row.bdiLabel || "-"}</td>
+                <td>${row.notes || "-"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `
+      : `<div class="muted">Nenhum histórico de valor e margem registrado ainda.</div>`;
+  }
 }
 
 function renderReports(items) {
@@ -915,18 +951,14 @@ function collectProposalServiceLines() {
 function syncProposalTotalsFromServices() {
   const lines = collectProposalServiceLines();
   const totalValue = lines.reduce((sum, item) => sum + Number(item.proposalValue || 0), 0);
-  const weightedBase = lines.reduce((sum, item) => {
-    if (!item.proposalValue || !item.bdi) return sum;
-    return sum + (Number(item.proposalValue) * Number(item.bdi));
-  }, 0);
-  const weightedValue = lines.reduce((sum, item) => {
-    if (!item.proposalValue || !item.bdi) return sum;
-    return sum + Number(item.proposalValue);
-  }, 0);
+  const averageBdiItems = lines.filter((item) => item.bdi !== "" && item.bdi !== null && item.bdi !== undefined);
+  const averageBdi = averageBdiItems.length
+    ? averageBdiItems.reduce((sum, item) => sum + Number(item.bdi || 0), 0) / averageBdiItems.length
+    : 0;
 
   if (lines.length) {
     document.getElementById("proposal-number-value").value = totalValue ? totalValue.toFixed(2) : "";
-    document.getElementById("proposal-number-bdi").value = weightedValue ? (weightedBase / weightedValue).toFixed(4) : "";
+    document.getElementById("proposal-number-bdi").value = averageBdiItems.length ? averageBdi.toFixed(4) : "";
   }
 }
 
@@ -1958,6 +1990,10 @@ function populateCommercialForm(detail) {
   document.getElementById("commercial-next-action").value = detail.commercialNextAction || detail.nextAction || "";
   document.getElementById("commercial-notes").value = detail.commercialNotes || detail.notes || "";
   document.getElementById("negotiation-summary").value = "";
+  document.getElementById("revised-proposal-value").value = "";
+  document.getElementById("revised-proposal-bdi").value = "";
+  document.getElementById("revised-proposal-value").placeholder = detail.proposalValueRaw || detail.proposalValue || "";
+  document.getElementById("revised-proposal-bdi").placeholder = detail.bdiRaw || detail.proposalBdi || "";
   document.getElementById("requested-adjustments").value = detail.commercialRequestedAdjustments || detail.requestedAdjustments || "";
   document.getElementById("probability-level").value = detail.commercialProbabilityLevel || detail.probabilityLevel || "";
   document.getElementById("probability-reason").value = detail.commercialProbabilityReason || detail.probabilityReason || "";
@@ -2430,12 +2466,6 @@ function validateProposalPayload(payload) {
   if (!payload.triageOwnerEmail) missing.push("Email do responsável");
   if (!payload.triageStatus) missing.push("Status da triagem");
   if (!payload.nextStageCode) missing.push("Mover para etapa");
-  if (
-    payload.nextStageCode === "proposta_finalizada"
-    && document.getElementById("selected-request-proposal-number").value === "Nao gerado"
-  ) {
-    missing.push("Gere o numero da proposta antes de finalizar");
-  }
   return missing;
 }
 
@@ -2454,6 +2484,8 @@ function buildCommercialPayload() {
     expectedCloseDate: form.get("expectedCloseDate"),
     commercialNotes: form.get("commercialNotes"),
     negotiationSummary: form.get("negotiationSummary"),
+    revisedProposalValue: form.get("revisedProposalValue"),
+    revisedBdi: form.get("revisedBdi"),
     requestedAdjustments: form.get("requestedAdjustments"),
     probabilityLevel: form.get("probabilityLevel"),
     probabilityReason: form.get("probabilityReason"),
@@ -3841,19 +3873,36 @@ async function bootstrap() {
       }
 
       if (!isProposalOnlyRecord && payload.requestId) {
-        await selectRequest(payload.requestId);
+        try {
+          await selectRequest(payload.requestId);
+        } catch (refreshError) {
+          console.warn("Nao foi possivel recarregar a solicitacao apos salvar a negociacao:", refreshError);
+        }
       } else if (payload.proposalRegistryId) {
-        const detail = await loadProposalNumberDetail(payload.proposalRegistryId);
-        renderProposalOnlyContext(detail);
-        populateCommercialForm(detail);
+        try {
+          const detail = await loadProposalNumberDetail(payload.proposalRegistryId);
+          renderProposalOnlyContext(detail);
+          populateCommercialForm(detail);
+        } catch (refreshError) {
+          console.warn("Nao foi possivel recarregar a proposta apos salvar a negociacao:", refreshError);
+        }
       }
-      await refreshRequestsTable();
-      await refreshDashboard();
-      await refreshProposalNumbers();
-      await refreshCrmProposalRequests();
-      reportRowsCache = await refreshReports();
-      renderAllStageBoards(reportRowsCache);
-      await loadNotifications();
+      const refreshResults = await Promise.allSettled([
+        refreshRequestsTable(),
+        refreshDashboard(),
+        refreshProposalNumbers(),
+        refreshCrmProposalRequests(),
+        refreshReports(),
+        loadNotifications()
+      ]);
+      const reportsResult = refreshResults[4];
+      if (reportsResult?.status === "fulfilled") {
+        reportRowsCache = reportsResult.value;
+        renderAllStageBoards(reportRowsCache);
+      }
+      refreshResults
+        .filter((item) => item.status === "rejected")
+        .forEach((item) => console.warn("Falha secundaria ao atualizar a tela apos salvar negociacao:", item.reason));
       alert(result.message || "Negociacao salva com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar a negociacao: ${error.message}`);
