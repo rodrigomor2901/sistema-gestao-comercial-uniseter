@@ -312,6 +312,8 @@ let notificationsUnreadCount = 0;
 let notificationPollTimer = null;
 let notificationToastSeenIds = new Set();
 let notificationsPanelOpen = false;
+const tableFilterState = new Map();
+const tableFilterObservers = new Map();
 let negotiationFiltersState = {
   dateStart: "",
   dateEnd: "",
@@ -3004,6 +3006,93 @@ async function loadJson(url) {
   return response.json();
 }
 
+function normalizeTableFilterText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function applyColumnFiltersToTable(table) {
+  const tbody = table?.querySelector("tbody[id]");
+  if (!tbody) return;
+  const tableKey = tbody.id;
+  const filters = tableFilterState.get(tableKey) || {};
+  const rows = [...tbody.querySelectorAll("tr")];
+
+  rows.forEach((row) => {
+    const cells = [...row.children];
+    const visible = Object.entries(filters).every(([index, rawValue]) => {
+      const filterValue = normalizeTableFilterText(rawValue);
+      if (!filterValue) return true;
+      const cell = cells[Number(index)];
+      if (!cell) return true;
+      return normalizeTableFilterText(cell.textContent).includes(filterValue);
+    });
+    row.style.display = visible ? "" : "none";
+  });
+}
+
+function setupColumnFiltersForTable(table) {
+  const tbody = table?.querySelector("tbody[id]");
+  const thead = table?.querySelector("thead");
+  const headerRow = thead?.querySelector("tr");
+  if (!tbody || !thead || !headerRow || tbody.id === "proposal-service-lines") return;
+  if (thead.querySelector(".table-filter-row")) {
+    applyColumnFiltersToTable(table);
+    return;
+  }
+
+  const tableKey = tbody.id;
+  const existingState = tableFilterState.get(tableKey) || {};
+  tableFilterState.set(tableKey, existingState);
+
+  const filterRow = document.createElement("tr");
+  filterRow.className = "table-filter-row";
+
+  [...headerRow.children].forEach((cell, index) => {
+    const title = String(cell.textContent || "").trim();
+    const th = document.createElement("th");
+    if (/^acao$|^ação$/i.test(normalizeTableFilterText(title))) {
+      th.innerHTML = `<span class="table-filter-placeholder">-</span>`;
+      filterRow.appendChild(th);
+      return;
+    }
+
+    const input = document.createElement("input");
+    input.type = "search";
+    input.className = "table-filter-input";
+    input.placeholder = "Filtrar";
+    input.value = existingState[index] || "";
+    input.setAttribute("aria-label", `Filtrar coluna ${title || index + 1}`);
+    input.addEventListener("input", () => {
+      const nextState = tableFilterState.get(tableKey) || {};
+      nextState[index] = input.value;
+      tableFilterState.set(tableKey, nextState);
+      applyColumnFiltersToTable(table);
+    });
+    th.appendChild(input);
+    filterRow.appendChild(th);
+  });
+
+  thead.appendChild(filterRow);
+
+  if (!tableFilterObservers.has(tableKey)) {
+    const observer = new MutationObserver(() => applyColumnFiltersToTable(table));
+    observer.observe(tbody, { childList: true, subtree: true });
+    tableFilterObservers.set(tableKey, observer);
+  }
+
+  applyColumnFiltersToTable(table);
+}
+
+function initializeColumnFilters() {
+  document.querySelectorAll("table").forEach((table) => {
+    setupColumnFiltersForTable(table);
+  });
+}
+
 function renderNotifications(items = notificationsCache) {
   const list = document.getElementById("notifications-list");
   const badge = document.getElementById("notifications-badge");
@@ -3319,6 +3408,7 @@ async function selectRequest(requestId) {
 async function bootstrap() {
   setupRequestForm();
   organizeProposalModuleLayout();
+  initializeColumnFilters();
   showLoginScreen();
 
   if (authToken) {
@@ -3697,7 +3787,7 @@ async function bootstrap() {
       await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
-      await fetchNotifications();
+      await loadNotifications();
       if (refreshedDetail) {
         const targetView = preferredWorkflowView(refreshedDetail, "propostas");
         setActiveView(targetView);
@@ -3763,7 +3853,7 @@ async function bootstrap() {
       await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
-      await fetchNotifications();
+      await loadNotifications();
       alert(result.message || "Negociacao salva com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar a negociacao: ${error.message}`);
@@ -3818,7 +3908,7 @@ async function bootstrap() {
       await refreshCrmProposalRequests();
       reportRowsCache = await refreshReports();
       renderAllStageBoards(reportRowsCache);
-      await fetchNotifications();
+      await loadNotifications();
       alert(result.message || "Contratual salvo com sucesso.");
     } catch (error) {
       alert(`Nao foi possivel salvar o contratual: ${error.message}`);
