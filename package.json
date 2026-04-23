@@ -11,6 +11,7 @@
     "run:sql": "node scripts/run-sql-file.js"
   },
   "dependencies": {
+    "cloudinary": "^2.9.0",
     "pg": "^8.20.0"
   }
 }

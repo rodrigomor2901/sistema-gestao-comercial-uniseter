@@ -1,4 +1,5 @@
-﻿const http = require("http");
+const cloudinary = require("cloudinary").v2;
+const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -15,6 +16,12 @@ const UPLOADS_DIR = process.env.APP_UPLOADS_DIR
   ? path.resolve(process.env.APP_UPLOADS_DIR)
   : path.join(__dirname, "uploads");
 const sessions = new Map();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 const APP_TIMEZONE = "America/Sao_Paulo";
 const BRANCH_OPTIONS = ["Matriz - Campinas", "Filial Minas"];
 const RESPONSIBLE_OPTIONS = ["ANDRE", "LANA", "RODRIGO", "GUILHERME", "KLEYTON", "MACCARI", "SUPERVISAO", "COORDENACAO"];
@@ -255,22 +262,6 @@ function sendCsv(response, fileName, content) {
     "Content-Type": "text/csv; charset=utf-8",
     "Content-Disposition": `attachment; filename="${fileName}"`
   });
-
-process.on("SIGINT", () => {
-  server.close(() => {
-    pool.end()
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1));
-  });
-});
-
-process.on("SIGTERM", () => {
-  server.close(() => {
-    pool.end()
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1));
-  });
-});
   response.end(`\uFEFF${content}`);
 }
 
@@ -566,6 +557,12 @@ function serveFile(response, filePath) {
 }
 
 function serveDownload(response, filePath, downloadName, mimeType) {
+  if (String(filePath || "").startsWith("http")) {
+    response.writeHead(302, { Location: filePath });
+    response.end();
+    return;
+  }
+
   fs.readFile(filePath, (error, data) => {
     if (error) {
       sendJson(response, 404, { error: "Arquivo nao encontrado." });
@@ -683,36 +680,30 @@ function sanitizeFileName(fileName) {
   return `${safeBase}${ext}`;
 }
 
-function saveAttachmentFile(requestId, attachmentType, file) {
+async function saveAttachmentFile(requestId, attachmentType, file) {
   if (!file?.contentBase64) return null;
 
-  ensureDirSync(UPLOADS_DIR);
-  const requestDir = path.join(UPLOADS_DIR, `request-${requestId}`);
-  ensureDirSync(requestDir);
+  const dataUri = `data:${file.mimeType || "application/octet-stream"};base64,${file.contentBase64}`;
 
-  const safeType = slugify(attachmentType || "anexo");
-  const safeName = sanitizeFileName(file.fileName);
-  const finalName = `${Date.now()}-${safeType}-${safeName}`;
-  const storagePath = path.join(requestDir, finalName);
+  const result = await cloudinary.uploader.upload(dataUri, {
+    folder: `uniseter/request-${requestId}`,
+    resource_type: "auto"
+  });
 
-  fs.writeFileSync(storagePath, Buffer.from(file.contentBase64, "base64"));
-  return storagePath;
+  return result.secure_url;
 }
 
-function saveModuleFile(moduleFolder, fileType, file) {
+async function saveModuleFile(moduleFolder, fileType, file) {
   if (!file?.contentBase64) return null;
 
-  ensureDirSync(UPLOADS_DIR);
-  const targetDir = path.join(UPLOADS_DIR, moduleFolder);
-  ensureDirSync(targetDir);
+  const dataUri = `data:${file.mimeType || "application/octet-stream"};base64,${file.contentBase64}`;
 
-  const safeType = slugify(fileType || "arquivo");
-  const safeName = sanitizeFileName(file.fileName);
-  const finalName = `${Date.now()}-${safeType}-${safeName}`;
-  const storagePath = path.join(targetDir, finalName);
+  const result = await cloudinary.uploader.upload(dataUri, {
+    folder: `uniseter/${moduleFolder}`,
+    resource_type: "auto"
+  });
 
-  fs.writeFileSync(storagePath, Buffer.from(file.contentBase64, "base64"));
-  return storagePath;
+  return result.secure_url;
 }
 
 function parsePositiveInteger(value) {
@@ -733,7 +724,8 @@ async function createAttachmentRecord(client, {
 }) {
   if (!file?.contentBase64) return null;
 
-  const storagePath = saveAttachmentFile(requestId, attachmentType, file);
+  const storagePath = await saveAttachmentFile(requestId, attachmentType, file);
+
   const result = await client.query(
     `INSERT INTO attachments (
       request_id, uploaded_by_user_id, attachment_type, file_name,
@@ -4208,7 +4200,7 @@ async function createProposalNumberRecord(client, payload, session) {
   const proposalNumberDisplay = formatProposalNumberDisplay(proposalSequence, issueDate);
   const proposalYear = Number(String(issueDate).slice(0, 4)) || new Date().getFullYear();
   const managerName = payload.managerName || session?.name || null;
-  const uploadedStoragePath = saveModuleFile("proposal-registry", "proposta", payload.uploadedFile);
+  const uploadedStoragePath = await saveModuleFile("proposal-registry", "proposta", payload.uploadedFile);
 
   const insertResult = await client.query(
     `INSERT INTO proposal_registry (
@@ -4469,7 +4461,7 @@ async function updateProposalNumber(proposalId, payload, session) {
     let uploadedFileSize = null;
 
     if (payload.uploadedFile?.contentBase64) {
-      uploadedStoragePath = saveModuleFile("proposal-registry", "proposta", payload.uploadedFile);
+      uploadedStoragePath = await saveModuleFile("proposal-registry", "proposta", payload.uploadedFile);
       uploadedFileName = payload.uploadedFile.fileName || uploadedFileName;
       uploadedMimeType = payload.uploadedFile.mimeType || null;
       uploadedFileSize = payload.uploadedFile.fileSize || null;
@@ -7509,6 +7501,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "GET" && /\/api\/attachments\/\d+\/download$/.test(url.pathname)) {
       assertAuthenticated(session);
       assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
+
       const attachmentId = Number(url.pathname.split("/")[3]);
       if (!Number.isFinite(attachmentId)) {
         sendJson(response, 400, { error: "Identificador do anexo invalido." });
@@ -7522,10 +7515,12 @@ const server = http.createServer(async (request, response) => {
       }
 
       await assertRequestAccess(attachment.requestId, session);
+
       if (!canDownloadAttachment(session, attachment.attachmentType)) {
-        sendJson(response, 403, { error: "Seu perfil nao pode baixar este tipo de anexo." });
+        sendJson(response, 403, { error: "Voce nao tem permissao para baixar este anexo." });
         return;
       }
+
       serveDownload(response, attachment.storagePath, attachment.fileName, attachment.mimeType);
       return;
     }
@@ -7533,6 +7528,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "GET" && /\/api\/requests\/\d+\/attachments$/.test(url.pathname)) {
       assertAuthenticated(session);
       assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
+
       const requestId = Number(url.pathname.split("/")[3]);
       if (!Number.isFinite(requestId)) {
         sendJson(response, 400, { error: "Identificador da solicitacao invalido." });
@@ -7549,8 +7545,8 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname.startsWith("/api/requests/")) {
       assertAuthenticated(session);
       assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
-      const requestId = Number(url.pathname.split("/").pop());
 
+      const requestId = Number(url.pathname.split("/").pop());
       if (!Number.isFinite(requestId)) {
         sendJson(response, 400, { error: "Identificador da solicitacao invalido." });
         return;
@@ -7609,8 +7605,18 @@ ensurePasswordColumn()
     console.error("Falha ao preparar usuários e perfis iniciais:", error);
     process.exit(1);
   });
+process.on("SIGINT", () => {
+  server.close(() => {
+    pool.end()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  });
+});
 
-
-
-
-
+process.on("SIGTERM", () => {
+  server.close(() => {
+    pool.end()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  });
+});
