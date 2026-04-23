@@ -1429,9 +1429,9 @@ async function deleteRequestAndRefresh(requestId) {
       updateRequestDeleteButton(null);
       renderDetail(requestDetailFallback());
       renderHistory([]);
-      renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente"]);
+      renderAttachmentList("proposal-attachments", [], ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual"]);
       renderAttachmentList("commercial-attachments", [], ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
-      renderAttachmentList("contract-attachments", [], ["minuta_inicial", "contrato_assinado"]);
+      renderAttachmentList("contract-attachments", [], ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
       populateProposalForm(requestDetailFallback());
       populateCommercialForm(requestDetailFallback());
       populateContractForm(requestDetailFallback());
@@ -1654,6 +1654,9 @@ function renderDetail(item) {
   const fields = [
     ["Numero", item.requestNumber],
     ["Empresa", item.company],
+    ["Contato do cliente", item.primaryContactName || item.contactName || "-"],
+    ["Cidade", item.city || "-"],
+    ["Estado", item.state || "-"],
     ["Etapa atual", item.stage],
     ["SLA", item.slaStatus],
     ["Responsável atual", item.currentOwner],
@@ -1715,6 +1718,9 @@ function renderProposalOnlyContext(detail) {
   renderDetail({
     requestNumber: detail.requestNumber || "-",
     company: detail.clientName || detail.company || "-",
+    contactName: detail.contactName || "-",
+    city: detail.city || "-",
+    state: detail.state || "-",
     stage: detail.stage || "-",
     slaStatus: "Sem SLA",
     currentOwner: detail.manager || detail.seller || "-",
@@ -1881,14 +1887,15 @@ function renderProposalRequestSummary(detail) {
   const requestContext = [
     detail.initialNote ? `Solicitacao inicial: ${detail.initialNote}` : null,
     detail.generalNotes ? `Observacoes gerais: ${detail.generalNotes}` : null,
-    detail.technicalDocNotes ? `Documento tecnico: ${detail.technicalDocNotes}` : null
+    detail.technicalDocNotes ? `Documento tecnico: ${detail.technicalDocNotes}` : null,
+    detail.requiredDocumentsNotes ? `Documentacao para contratos: ${detail.requiredDocumentsNotes}` : null
   ].filter(Boolean);
 
   container.innerHTML = [
+    renderSummaryCard("Contexto da solicitacao", requestContext),
     renderSummaryCard("Tipos de servico", normalizedServices),
     renderSummaryCard("Beneficios", benefits),
-    renderSummaryCard("Operacao por servico", operationSummary),
-    renderSummaryCard("Contexto da solicitacao", requestContext)
+    renderSummaryCard("Operacao por servico", operationSummary)
   ].join("");
 }
 
@@ -2418,6 +2425,7 @@ function populateRequestForm(detail) {
   document.getElementById("food-notes").value = detail.benefits?.find((item) => item.benefitType === "vale_alimentacao")?.notes || "";
   document.getElementById("general-notes").value = detail.generalNotes || "";
   document.getElementById("technical-doc-notes").value = detail.technicalDocNotes || "";
+  document.getElementById("required-documents-notes").value = detail.requiredDocumentsNotes || "";
   document.getElementById("save-request-button").dataset.idleLabel = detail.stageCode === "aguardando_informacoes"
     ? "Salvar correções e devolver para triagem"
     : "Salvar solicitacao";
@@ -2614,9 +2622,11 @@ async function buildRequestPayload() {
     equipments,
     generalNotes: data.get("generalNotes"),
     technicalDocNotes: data.get("technicalDocNotes"),
+    requiredDocumentsNotes: data.get("requiredDocumentsNotes"),
     pendingResponseNote: data.get("pendingResponseNote"),
     initialAttachments: await collectFiles("initial-attachments"),
-    technicalDocs: await collectFiles("technical-docs")
+    technicalDocs: await collectFiles("technical-docs"),
+    requiredDocumentsFiles: await collectFiles("required-documents-files")
   };
 }
 
@@ -2658,7 +2668,10 @@ Operacao por servico:
 ${operationSummary.join("\n\n") || "-"}
 
 Observacoes gerais:
-${payload.generalNotes || "-"}`;
+${payload.generalNotes || "-"}
+
+Documentacao para contratos:
+${payload.requiredDocumentsNotes || "-"}`;
 
   document.getElementById("request-form-preview").textContent = preview;
 }
@@ -3398,9 +3411,9 @@ async function loadAuthenticatedAppData() {
   renderNotifications(notificationsCache);
   renderDetail(initialDetail);
   renderHistory(initialDetail.history || []);
-  renderAttachmentList("proposal-attachments", initialAttachments, ["anexo_inicial", "documento_tecnico_cliente"]);
+  renderAttachmentList("proposal-attachments", initialAttachments, ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual"]);
   renderAttachmentList("commercial-attachments", initialAttachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
-  renderAttachmentList("contract-attachments", initialAttachments, ["minuta_inicial", "contrato_assinado"]);
+  renderAttachmentList("contract-attachments", initialAttachments, ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
   await renderRequestFormPreview();
   populateRequestForm(initialDetail);
   resetProposalNumberForm();
@@ -3426,9 +3439,9 @@ async function selectRequest(requestId) {
   const attachments = await loadRequestAttachments(requestId);
   renderDetail(detail);
   renderHistory(detail.history || []);
-  renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente"]);
+  renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual"]);
   renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
-  renderAttachmentList("contract-attachments", attachments, ["minuta_inicial", "contrato_assinado"]);
+  renderAttachmentList("contract-attachments", attachments, ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
   populateRequestForm(detail);
   populateProposalForm(detail);
   populateCommercialForm(detail);
@@ -3575,7 +3588,7 @@ async function bootstrap() {
         const detail = await loadProposalNumberDetail(stageRow.dataset.proposalId);
         const attachments = detail.requestId ? await loadRequestAttachments(detail.requestId) : [];
         renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
-        renderAttachmentList("contract-attachments", attachments, ["minuta_inicial", "contrato_assinado"]);
+        renderAttachmentList("contract-attachments", attachments, ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
         renderProposalOnlyContext(detail);
         populateContractForm(detail);
         setActiveView("contratos");
@@ -3591,7 +3604,7 @@ async function bootstrap() {
         const detail = await loadProposalNumberDetail(stageRow.dataset.proposalId);
         const attachments = detail.requestId ? await loadRequestAttachments(detail.requestId) : [];
         renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
-        renderAttachmentList("contract-attachments", attachments, ["minuta_inicial", "contrato_assinado"]);
+        renderAttachmentList("contract-attachments", attachments, ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
         renderProposalOnlyContext(detail);
         if ((stageRow.dataset.moduleKey || currentView) === "contratos") {
           populateContractForm(detail);

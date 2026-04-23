@@ -520,7 +520,7 @@ function assertAnyModuleAccess(session, moduleNames, message) {
 function canDownloadAttachment(session, attachmentType) {
   const role = session?.role || "vendedor";
   const sensitiveContract = ["minuta_inicial", "contrato_assinado"];
-  const sellerDocs = ["anexo_inicial", "documento_tecnico_cliente", "proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"];
+  const sellerDocs = ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual", "proposta_final_pdf", "anexo_proposta_complementar", "anexo_aceite"];
 
   if (role === "administrador" || role === "comercial_interno") return true;
   if (role === "diretoria" || role === "gestor") return true;
@@ -557,7 +557,7 @@ function serveFile(response, filePath) {
 }
 
 function serveDownload(response, filePath, downloadName, mimeType) {
-  if (String(filePath || "").startsWith("http")) {
+  if (isRemoteStoragePath(filePath)) {
     response.writeHead(302, { Location: filePath });
     response.end();
     return;
@@ -678,6 +678,10 @@ function sanitizeFileName(fileName) {
   const base = path.basename(fileName || "arquivo", ext);
   const safeBase = slugify(base) || "arquivo";
   return `${safeBase}${ext}`;
+}
+
+function isRemoteStoragePath(filePath) {
+  return /^https?:\/\//i.test(String(filePath || "").trim());
 }
 
 async function saveAttachmentFile(requestId, attachmentType, file) {
@@ -1357,6 +1361,14 @@ async function ensureRequestSubmissionKeyColumn() {
   await query(`
     CREATE UNIQUE INDEX IF NOT EXISTS uq_requests_submission_key
     ON requests(submission_key)
+  `);
+}
+
+async function ensureRequestDocumentationColumns() {
+  await query(`
+    ALTER TABLE requests
+    ADD COLUMN IF NOT EXISTS technical_doc_notes TEXT,
+    ADD COLUMN IF NOT EXISTS required_documents_notes TEXT
   `);
 }
 
@@ -2287,6 +2299,20 @@ async function collectProposalNotificationRecipientIds(client, proposalRegistryI
   ].filter((item) => Number.isInteger(Number(item)) && Number(item) > 0).map((item) => Number(item)))];
 }
 
+async function collectContractsNotificationRecipientIds(client, extraUserIds = []) {
+  const result = await client.query(
+    `SELECT id
+     FROM users
+     WHERE is_active = TRUE
+       AND module_access @> ARRAY['contratos']::TEXT[]`
+  );
+
+  return [...new Set([
+    ...result.rows.map((row) => parsePositiveInteger(row.id)),
+    ...(extraUserIds || []).map((item) => parsePositiveInteger(item))
+  ].filter(Boolean))];
+}
+
 async function createStatusChangeNotifications(client, {
   recipientUserIds = [],
   actor = {},
@@ -2353,6 +2379,72 @@ async function createStatusChangeNotifications(client, {
         message,
         fromStageCode || null,
         toStageCode || null,
+        actorUserId || null,
+        actor.name || null,
+        actor.email || null
+      ]
+    );
+    if (result.rows[0]?.id) {
+      createdIds.push(result.rows[0].id);
+    }
+  }
+
+  return createdIds;
+}
+
+async function createDocumentationNotifications(client, {
+  recipientUserIds = [],
+  actor = {},
+  requestId = null,
+  proposalRegistryId = null,
+  requestNumber = null,
+  company = null,
+  notes = null
+} = {}) {
+  const actorUserId = parsePositiveInteger(actor.userId);
+  const recipients = [...new Set(
+    (recipientUserIds || [])
+      .map((item) => parsePositiveInteger(item))
+      .filter(Boolean)
+  )];
+
+  if (!recipients.length) return [];
+
+  const title = "Documentacao contratual atualizada";
+  const origin = requestNumber
+    ? `${requestNumber}${company ? ` | ${company}` : ""}`
+    : (company || "Solicitacao atualizada");
+  const actorLabel = buildHistoryActorLabel(actor.name, actor.email);
+  const message = [
+    origin,
+    "O vendedor sinalizou documentacao necessaria para contratos.",
+    `Responsavel pela atualizacao: ${actorLabel}`,
+    String(notes || "").trim()
+  ].filter(Boolean).join(" | ");
+
+  const createdIds = [];
+  for (const recipientUserId of recipients) {
+    const result = await client.query(
+      `INSERT INTO user_notifications (
+        recipient_user_id,
+        request_id,
+        proposal_registry_id,
+        notification_type,
+        title,
+        message,
+        actor_user_id,
+        actor_name,
+        actor_email
+      ) VALUES (
+        $1, $2, $3, 'documentation_alert', $4, $5, $6, $7, $8
+      )
+      RETURNING id`,
+      [
+        recipientUserId,
+        requestId || null,
+        proposalRegistryId || null,
+        title,
+        message,
         actorUserId || null,
         actor.name || null,
         actor.email || null
@@ -3383,10 +3475,11 @@ async function createRequest(payload, session) {
       `INSERT INTO requests (
         request_number, client_id, seller_user_id, current_stage_id, current_owner_user_id,
         request_date, deadline_date, branch_name, lead_source, initial_note, general_notes,
+        technical_doc_notes, required_documents_notes,
         submission_key
       ) VALUES (
         $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11, $12
+        $6, $7, $8, $9, $10, $11, $12, $13, $14
       ) RETURNING id, request_number`,
       [
         requestNumber,
@@ -3400,6 +3493,8 @@ async function createRequest(payload, session) {
         payload.leadSource || null,
         payload.initialNote || null,
         payload.generalNotes || null,
+        payload.technicalDocNotes || null,
+        payload.requiredDocumentsNotes || null,
         submissionKey
       ]
     );
@@ -3437,6 +3532,29 @@ async function createRequest(payload, session) {
       files: payload.technicalDocs,
       description: payload.technicalDocNotes || "Documentos tecnicos do cliente"
     });
+
+    const requiredDocumentAttachmentIds = await createAttachmentRecords(client, {
+      requestId,
+      uploadedByUserId: sellerUserId,
+      attachmentType: "documentacao_contratual",
+      files: payload.requiredDocumentsFiles,
+      description: payload.requiredDocumentsNotes || "Documentacao necessaria para contratos"
+    });
+
+    if ((payload.requiredDocumentsNotes && String(payload.requiredDocumentsNotes).trim()) || requiredDocumentAttachmentIds.length) {
+      await createDocumentationNotifications(client, {
+        recipientUserIds: await collectContractsNotificationRecipientIds(client),
+        actor: {
+          userId: session?.userId || sellerUserId,
+          name: session?.name || payload.sellerName,
+          email: session?.email || payload.sellerEmail
+        },
+        requestId,
+        requestNumber: requestResult.rows[0].request_number,
+        company: payload.legalName,
+        notes: payload.requiredDocumentsNotes || "Documentacao contratual anexada pelo vendedor."
+      });
+    }
 
     await logAuditEntry(client, {
       actor: {
@@ -3548,6 +3666,8 @@ async function updateRequest(payload, requestId, session) {
            lead_source = $6,
            initial_note = $7,
            general_notes = $8,
+           technical_doc_notes = $9,
+           required_documents_notes = $10,
            updated_at = NOW()
        WHERE id = $1`,
       [
@@ -3558,7 +3678,9 @@ async function updateRequest(payload, requestId, session) {
         payload.branchName || null,
         payload.leadSource || null,
         payload.initialNote || null,
-        payload.generalNotes || null
+        payload.generalNotes || null,
+        payload.technicalDocNotes || null,
+        payload.requiredDocumentsNotes || null
       ]
     );
 
@@ -3579,6 +3701,34 @@ async function updateRequest(payload, requestId, session) {
       files: payload.technicalDocs,
       description: payload.technicalDocNotes || "Documentos tecnicos do cliente"
     });
+
+    const requiredDocumentAttachmentIds = await createAttachmentRecords(client, {
+      requestId,
+      uploadedByUserId: session?.userId || sellerUserId,
+      attachmentType: "documentacao_contratual",
+      files: payload.requiredDocumentsFiles,
+      description: payload.requiredDocumentsNotes || "Documentacao necessaria para contratos"
+    });
+
+    const shouldNotifyContracts = (
+      (payload.requiredDocumentsNotes && String(payload.requiredDocumentsNotes).trim())
+      || requiredDocumentAttachmentIds.length
+    );
+
+    if (shouldNotifyContracts) {
+      await createDocumentationNotifications(client, {
+        recipientUserIds: await collectContractsNotificationRecipientIds(client),
+        actor: {
+          userId: session?.userId || sellerUserId,
+          name: session?.name || payload.sellerName,
+          email: session?.email || payload.sellerEmail
+        },
+        requestId,
+        requestNumber: existing.requestNumber,
+        company: payload.legalName,
+        notes: payload.requiredDocumentsNotes || "Documentacao contratual atualizada pelo vendedor."
+      });
+    }
 
     let returnedToTriage = false;
     if (existing.currentStageCode === "aguardando_informacoes") {
@@ -4325,6 +4475,10 @@ async function getProposalNumberDetail(proposalId, session) {
        pr.bdi AS "bdiRaw",
        pr.service_scope AS "serviceScope",
        pr.contact_name AS "contactName",
+       linked_client.city,
+       linked_client.state,
+       req.technical_doc_notes AS "technicalDocNotes",
+       req.required_documents_notes AS "requiredDocumentsNotes",
        pr.phone,
        pr.industry_segment AS "industrySegment",
        pr.notes,
@@ -4365,6 +4519,7 @@ async function getProposalNumberDetail(proposalId, session) {
        TO_CHAR(pr.operation_start_date, 'YYYY-MM-DD') AS "operationStartDate"
      FROM proposal_registry pr
      LEFT JOIN requests req ON req.id = pr.request_id
+     LEFT JOIN clients linked_client ON linked_client.id = req.client_id
      LEFT JOIN users seller_user ON seller_user.id = pr.seller_user_id
      WHERE pr.id = $1
        AND ${accessClause}`,
@@ -5077,6 +5232,8 @@ async function getRequestDetailFromDb(requestId, session) {
        r.lead_source AS "leadSource",
        r.initial_note AS "initialNote",
        r.general_notes AS "generalNotes",
+       r.technical_doc_notes AS "technicalDocNotes",
+       r.required_documents_notes AS "requiredDocumentsNotes",
        TO_CHAR(r.request_date, 'DD/MM/YYYY') AS "requestDate",
        TO_CHAR(r.request_date, 'YYYY-MM-DD') AS "requestDateIso",
        TO_CHAR(r.deadline_date, 'DD/MM/YYYY') AS "deadlineDate",
@@ -5757,6 +5914,7 @@ function attachmentLabel(type) {
   const labels = {
     anexo_inicial: "Anexo inicial",
     documento_tecnico_cliente: "Documento tecnico do cliente",
+    documentacao_contratual: "Documentacao contratual",
     proposta_final_pdf: "PDF da proposta",
     anexo_proposta_complementar: "Arquivo complementar da proposta",
     planilha_aberta_proposta: "Planilha aberta",
@@ -7367,6 +7525,9 @@ const server = http.createServer(async (request, response) => {
       const removed = await deleteRequest(requestId, session);
       for (const storagePath of removed.attachmentPaths) {
         try {
+          if (isRemoteStoragePath(storagePath)) {
+            continue;
+          }
           const resolvedPath = path.isAbsolute(storagePath)
             ? storagePath
             : path.resolve(storagePath);
@@ -7578,6 +7739,7 @@ ensurePasswordColumn()
   .then(() => ensureModuleAccessColumn())
   .then(() => ensureWorkflowStageAccessColumn())
   .then(() => ensureRequestSubmissionKeyColumn())
+  .then(() => ensureRequestDocumentationColumns())
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureWorkflowStageNames())
   .then(() => ensureAppLookupOptionsTable())
