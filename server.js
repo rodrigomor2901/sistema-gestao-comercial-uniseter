@@ -3793,41 +3793,41 @@ async function syncClientReferenceRecords(client, clientId, payload) {
 async function updateClientMasterRecord(client, clientId, payload, preserveExisting = true) {
   await client.query(
     `UPDATE clients
-     SET legal_name = COALESCE($2, legal_name),
-         trade_name = COALESCE($3, trade_name),
+     SET legal_name = COALESCE($2::text, legal_name),
+         trade_name = COALESCE($3::text, trade_name),
          cnpj = CASE
-           WHEN $4 IS NULL AND $13 THEN cnpj
-           ELSE $4
+           WHEN $4::text IS NULL AND $13::boolean THEN cnpj
+           ELSE $4::text
          END,
          industry_segment = CASE
-           WHEN $5 IS NULL AND $13 THEN industry_segment
-           ELSE $5
+           WHEN $5::text IS NULL AND $13::boolean THEN industry_segment
+           ELSE $5::text
          END,
          main_email = CASE
-           WHEN $6 IS NULL AND $13 THEN main_email
-           ELSE $6
+           WHEN $6::text IS NULL AND $13::boolean THEN main_email
+           ELSE $6::text
          END,
          address = CASE
-           WHEN $7 IS NULL AND $13 THEN address
-           ELSE $7
+           WHEN $7::text IS NULL AND $13::boolean THEN address
+           ELSE $7::text
          END,
          address_number = CASE
-           WHEN $8 IS NULL AND $13 THEN address_number
-           ELSE $8
+           WHEN $8::text IS NULL AND $13::boolean THEN address_number
+           ELSE $8::text
          END,
          address_complement = CASE
-           WHEN $9 IS NULL AND $13 THEN address_complement
-           ELSE $9
+           WHEN $9::text IS NULL AND $13::boolean THEN address_complement
+           ELSE $9::text
          END,
          district = CASE
-           WHEN $10 IS NULL AND $13 THEN district
-           ELSE $10
+           WHEN $10::text IS NULL AND $13::boolean THEN district
+           ELSE $10::text
          END,
-         city = COALESCE($11, city),
-         state = COALESCE($12, state),
+         city = COALESCE($11::text, city),
+         state = COALESCE($12::text, state),
          zip_code = CASE
-           WHEN $14 IS NULL AND $13 THEN zip_code
-           ELSE $14
+           WHEN $14::text IS NULL AND $13::boolean THEN zip_code
+           ELSE $14::text
          END
      WHERE id = $1`,
     [
