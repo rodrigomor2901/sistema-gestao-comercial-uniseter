@@ -451,21 +451,20 @@ function renderClientMatchPanel({ loading = false, matches = null } = {}) {
 
   if (loading) {
     panel.style.display = "";
-    panel.innerHTML = `<div class="muted">Buscando clientes já cadastrados...</div>`;
+    panel.innerHTML = `<div class="client-match-banner"><div><strong>Buscando cliente existente</strong><p class="muted">Consultando cadastros parecidos para reaproveitar o histórico do cliente.</p></div></div>`;
     return;
   }
 
   if (selectedExistingClient) {
     panel.style.display = "";
     panel.innerHTML = `
-      <div class="list-item">
-        <div class="list-top">
+      <div class="client-match-banner">
+        <div>
           <strong>Cliente vinculado: ${escapeHtml(selectedExistingClient.legalName || "-")}</strong>
-          <button type="button" class="secondary" data-client-action="unlink">Desvincular</button>
+          <p class="muted">Novo negócio será criado dentro deste cadastro.${selectedExistingClient.city || selectedExistingClient.state ? ` ${escapeHtml([selectedExistingClient.city, selectedExistingClient.state].filter(Boolean).join(" / "))}` : ""}</p>
         </div>
-        <div class="muted">
-          Novo negócio será criado dentro deste cadastro.
-          ${selectedExistingClient.city || selectedExistingClient.state ? ` ${escapeHtml([selectedExistingClient.city, selectedExistingClient.state].filter(Boolean).join(" / "))}` : ""}
+        <div>
+          <button type="button" class="secondary" data-client-action="unlink">Desvincular</button>
         </div>
       </div>
     `;
@@ -481,25 +480,34 @@ function renderClientMatchPanel({ loading = false, matches = null } = {}) {
 
   panel.style.display = "";
   panel.innerHTML = `
-    <div class="muted" style="margin-bottom:8px;">Clientes parecidos encontrados. Você pode reaproveitar um cadastro existente ou seguir com um novo.</div>
-    ${safeMatches.map((match, index) => `
-      <div class="list-item">
-        <div class="list-top">
+    <div class="client-match-banner">
+      <div>
+        <strong>Clientes parecidos encontrados</strong>
+        <p class="muted">Você pode reaproveitar um cadastro existente ou seguir com um novo.</p>
+      </div>
+    </div>
+    <div class="client-match-list">
+      ${safeMatches.map((match, index) => `
+      <div class="client-match-item">
+        <div>
           <strong>${escapeHtml(match.legalName || "-")}</strong>
+          <div class="muted">
+            ${escapeHtml([
+              match.tradeName ? `Fantasia: ${match.tradeName}` : "",
+              match.city ? `${match.city}/${match.state || ""}` : "",
+              match.cnpj ? `CNPJ: ${match.cnpj}` : ""
+            ].filter(Boolean).join(" | ") || "Cadastro existente")}
+          </div>
+          <div class="muted">
+            ${escapeHtml(match.warningMessage || `${match.requestCount || 0} negócios já cadastrados para este cliente.`)}
+          </div>
+        </div>
+        <div>
           <button type="button" class="secondary" data-client-action="select" data-client-index="${index}">Usar este cliente</button>
-        </div>
-        <div class="muted">
-          ${escapeHtml([
-            match.tradeName ? `Fantasia: ${match.tradeName}` : "",
-            match.city ? `${match.city}/${match.state || ""}` : "",
-            match.cnpj ? `CNPJ: ${match.cnpj}` : ""
-          ].filter(Boolean).join(" | ") || "Cadastro existente")}
-        </div>
-        <div class="muted">
-          ${escapeHtml(match.warningMessage || `${match.requestCount || 0} negócios já cadastrados para este cliente.`)}
         </div>
       </div>
     `).join("")}
+    </div>
   `;
 }
 

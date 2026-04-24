@@ -813,6 +813,10 @@ th {
   grid-column: span 4;
 }
 
+.control-span-8 {
+  grid-column: span 8;
+}
+
 .chips {
   display: flex;
   gap: 6px;
@@ -845,6 +849,70 @@ th {
   line-height: 1.45;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
+}
+
+.client-match-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.client-match-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fcfaf6;
+  font-size: 12px;
+}
+
+.client-match-banner strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.client-match-banner .muted {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.client-match-banner .secondary {
+  white-space: nowrap;
+}
+
+.client-match-list {
+  display: grid;
+  gap: 8px;
+}
+
+.client-match-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.client-match-item strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.client-match-item .muted {
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.client-match-item .secondary {
+  white-space: nowrap;
 }
 
 .stage-tabs {
@@ -1391,6 +1459,10 @@ input[type="file"] {
   .admin-lookup-group-multi { grid-template-columns: 1fr; }
   .proposal-number-grid,
   .proposal-number-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .client-match-banner,
+  .client-match-item { flex-direction: column; }
+  .client-match-banner .secondary,
+  .client-match-item .secondary { align-self: flex-start; }
 }
 
 @media (max-width: 560px) {
@@ -1407,5 +1479,5 @@ input[type="file"] {
   .proposal-number-grid,
   .proposal-number-form-grid { grid-template-columns: 1fr; }
   .control-span-2, .control-span-3 { grid-column: span 1; }
-  .control-span-4 { grid-column: span 1; }
+  .control-span-4, .control-span-8 { grid-column: span 1; }
 }
