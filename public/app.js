@@ -334,6 +334,8 @@ let activeAdminLookupCategory = "";
 let notificationsCache = [];
 let notificationsUnreadCount = 0;
 let notificationPollTimer = null;
+let appDataPollTimer = null;
+let appDataRefreshInFlight = false;
 let notificationToastSeenIds = new Set();
 let notificationsPanelOpen = false;
 const tableFilterState = new Map();
@@ -382,6 +384,7 @@ const PROPOSAL_SERVICE_TYPES = [
 ];
 let authToken = localStorage.getItem("crmAuthToken") || "";
 let listenersInitialized = false;
+const APP_AUTO_REFRESH_INTERVAL_MS = 20000;
 const activeModuleStage = Object.fromEntries(
   Object.entries(MODULE_STAGE_CONFIG).map(([key, stages]) => [key, stages[0].code])
 );
@@ -3491,6 +3494,108 @@ function stopNotificationsPolling() {
   }
 }
 
+function hasWorkflowSaveInFlight() {
+  return Boolean(
+    requestSaveInFlight
+    || proposalNumberSaveInFlight
+    || proposalSaveInFlight
+    || commercialSaveInFlight
+    || contractSaveInFlight
+  );
+}
+
+function isInteractiveFieldFocused() {
+  const activeElement = document.activeElement;
+  return Boolean(
+    activeElement
+    && activeElement.matches
+    && activeElement.matches("input, textarea, select")
+  );
+}
+
+async function refreshSelectedRequestContextSilently() {
+  if (!selectedRequestId) return;
+
+  try {
+    const detail = await loadJson(`/api/requests/${selectedRequestId}`);
+    const attachments = await loadRequestAttachments(selectedRequestId);
+    renderDetail(detail);
+    renderHistory(detail.history || []);
+    renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual"]);
+    renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+    renderAttachmentList("contract-attachments", attachments, ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
+  } catch (error) {
+    console.warn("Nao foi possivel atualizar o contexto da solicitacao selecionada.", error);
+  }
+}
+
+async function refreshApplicationDataSilently() {
+  if (!authToken || document.hidden || hasWorkflowSaveInFlight() || appDataRefreshInFlight) {
+    return;
+  }
+
+  appDataRefreshInFlight = true;
+  try {
+    const refreshResults = await Promise.allSettled([
+      refreshRequestsTable(),
+      refreshDashboard(),
+      refreshProposalNumbers(),
+      refreshCrmProposalRequests(),
+      refreshReports(),
+      loadNotifications({ silent: true })
+    ]);
+
+    const requestsResult = refreshResults[0];
+    const reportsResult = refreshResults[4];
+
+    if (reportsResult?.status === "fulfilled") {
+      reportRowsCache = reportsResult.value;
+      renderAllStageBoards(reportRowsCache);
+    }
+
+    if (requestsResult?.status === "fulfilled") {
+      const requests = requestsResult.value || [];
+      const selectedStillExists = selectedRequestId
+        ? requests.some((item) => String(item.id) === String(selectedRequestId))
+        : false;
+
+      if (!selectedStillExists) {
+        selectedRequestId = requests[0]?.id || null;
+        updateRequestDeleteButton(selectedRequestId);
+      }
+    }
+
+    if (!isInteractiveFieldFocused()) {
+      await refreshSelectedRequestContextSilently();
+    }
+
+    refreshResults
+      .filter((item) => item.status === "rejected")
+      .forEach((item) => console.warn("Falha secundaria ao atualizar o painel automaticamente:", item.reason));
+  } finally {
+    appDataRefreshInFlight = false;
+  }
+}
+
+function startApplicationPolling() {
+  if (appDataPollTimer) {
+    window.clearInterval(appDataPollTimer);
+  }
+  appDataPollTimer = window.setInterval(() => {
+    refreshApplicationDataSilently().catch((error) => {
+      console.warn("Nao foi possivel atualizar os dados automaticamente.", error);
+    });
+  }, APP_AUTO_REFRESH_INTERVAL_MS);
+}
+
+function stopApplicationPolling() {
+  if (appDataPollTimer) {
+    window.clearInterval(appDataPollTimer);
+    appDataPollTimer = null;
+  }
+  appDataRefreshInFlight = false;
+}
+
 async function markNotificationAsRead(notificationId) {
   const response = await fetchWithSession(`/api/notifications/${notificationId}/read`, { method: "POST" });
   if (!response.ok) {
@@ -3542,6 +3647,7 @@ async function autofillAddressFromZipCode() {
 
 function showLoginScreen() {
   stopNotificationsPolling();
+  stopApplicationPolling();
   forcePasswordChange = false;
   notificationsCache = [];
   notificationsUnreadCount = 0;
@@ -3686,6 +3792,7 @@ async function loadAuthenticatedAppData() {
   setActiveView("dashboard");
   showAppShell();
   startNotificationsPolling();
+  startApplicationPolling();
 }
 
 async function reloadApplicationLookups() {
@@ -3783,6 +3890,13 @@ async function bootstrap() {
     } catch (error) {
       alert(`Nao foi possivel excluir o anexo: ${error.message}`);
     }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!authToken || document.hidden) return;
+    refreshApplicationDataSilently().catch((error) => {
+      console.warn("Nao foi possivel sincronizar os dados ao reabrir a aba.", error);
+    });
   });
 
   document.addEventListener("click", async (event) => {
