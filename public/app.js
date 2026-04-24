@@ -334,8 +334,10 @@ let activeAdminLookupCategory = "";
 let notificationsCache = [];
 let notificationsUnreadCount = 0;
 let notificationPollTimer = null;
-let appDataPollTimer = null;
 let appDataRefreshInFlight = false;
+let realtimeEventSource = null;
+let realtimeReconnectTimer = null;
+let pendingRealtimeRefreshTimer = null;
 let notificationToastSeenIds = new Set();
 let notificationsPanelOpen = false;
 const tableFilterState = new Map();
@@ -384,7 +386,6 @@ const PROPOSAL_SERVICE_TYPES = [
 ];
 let authToken = localStorage.getItem("crmAuthToken") || "";
 let listenersInitialized = false;
-const APP_AUTO_REFRESH_INTERVAL_MS = 20000;
 const activeModuleStage = Object.fromEntries(
   Object.entries(MODULE_STAGE_CONFIG).map(([key, stages]) => [key, stages[0].code])
 );
@@ -3585,23 +3586,59 @@ async function refreshApplicationDataSilently() {
   }
 }
 
-function startApplicationPolling() {
-  if (appDataPollTimer) {
-    window.clearInterval(appDataPollTimer);
+function scheduleRealtimeRefresh() {
+  if (pendingRealtimeRefreshTimer) {
+    window.clearTimeout(pendingRealtimeRefreshTimer);
   }
-  appDataPollTimer = window.setInterval(() => {
+  pendingRealtimeRefreshTimer = window.setTimeout(() => {
+    pendingRealtimeRefreshTimer = null;
     refreshApplicationDataSilently().catch((error) => {
       console.warn("Nao foi possivel atualizar os dados automaticamente.", error);
     });
-  }, APP_AUTO_REFRESH_INTERVAL_MS);
+  }, 900);
 }
 
-function stopApplicationPolling() {
-  if (appDataPollTimer) {
-    window.clearInterval(appDataPollTimer);
-    appDataPollTimer = null;
+function stopRealtimeSync() {
+  if (pendingRealtimeRefreshTimer) {
+    window.clearTimeout(pendingRealtimeRefreshTimer);
+    pendingRealtimeRefreshTimer = null;
+  }
+  if (realtimeReconnectTimer) {
+    window.clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = null;
+  }
+  if (realtimeEventSource) {
+    realtimeEventSource.close();
+    realtimeEventSource = null;
   }
   appDataRefreshInFlight = false;
+}
+
+function startRealtimeSync() {
+  stopRealtimeSync();
+  if (!authToken || typeof EventSource === "undefined") return;
+
+  const source = new EventSource(`/api/events?${sessionQueryString()}`);
+  realtimeEventSource = source;
+
+  source.addEventListener("crm-data-updated", () => {
+    scheduleRealtimeRefresh();
+  });
+
+  source.onerror = () => {
+    if (realtimeEventSource === source) {
+      source.close();
+      realtimeEventSource = null;
+    }
+    if (!authToken) return;
+    if (realtimeReconnectTimer) {
+      window.clearTimeout(realtimeReconnectTimer);
+    }
+    realtimeReconnectTimer = window.setTimeout(() => {
+      realtimeReconnectTimer = null;
+      startRealtimeSync();
+    }, 5000);
+  };
 }
 
 async function markNotificationAsRead(notificationId) {
@@ -3655,7 +3692,7 @@ async function autofillAddressFromZipCode() {
 
 function showLoginScreen() {
   stopNotificationsPolling();
-  stopApplicationPolling();
+  stopRealtimeSync();
   forcePasswordChange = false;
   notificationsCache = [];
   notificationsUnreadCount = 0;
@@ -3800,7 +3837,7 @@ async function loadAuthenticatedAppData() {
   setActiveView("dashboard");
   showAppShell();
   startNotificationsPolling();
-  startApplicationPolling();
+  startRealtimeSync();
 }
 
 async function reloadApplicationLookups() {

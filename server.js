@@ -17,6 +17,7 @@ const UPLOADS_DIR = process.env.APP_UPLOADS_DIR
   ? path.resolve(process.env.APP_UPLOADS_DIR)
   : path.join(__dirname, "uploads");
 const sessions = new Map();
+const realtimeClients = new Set();
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -265,6 +266,47 @@ function sendCsv(response, fileName, content) {
   });
   response.end(`\uFEFF${content}`);
 }
+
+function registerRealtimeClient(response, session) {
+  const client = {
+    response,
+    token: session?.token || "",
+    userId: session?.userId || null
+  };
+  realtimeClients.add(client);
+  return client;
+}
+
+function unregisterRealtimeClient(client) {
+  if (client) {
+    realtimeClients.delete(client);
+  }
+}
+
+function broadcastRealtimeEvent(eventName, payload = {}) {
+  const data = `event: ${eventName}\ndata: ${JSON.stringify({
+    ...payload,
+    sentAt: new Date().toISOString()
+  })}\n\n`;
+
+  realtimeClients.forEach((client) => {
+    try {
+      client.response.write(data);
+    } catch (error) {
+      unregisterRealtimeClient(client);
+    }
+  });
+}
+
+setInterval(() => {
+  realtimeClients.forEach((client) => {
+    try {
+      client.response.write(": keepalive\n\n");
+    } catch (error) {
+      unregisterRealtimeClient(client);
+    }
+  });
+}, 25000);
 
 function getSessionContext(request, url) {
   pruneExpiredSessions();
@@ -4072,7 +4114,7 @@ async function createRequest(payload, session) {
         submission_key
       ) VALUES (
         $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11, $12, $13, $14
+        $6::date, $7::date, $8, $9, $10, $11, $12, $13, $14
       ) RETURNING id, request_number`,
       [
         requestNumber,
@@ -4235,8 +4277,8 @@ async function updateRequest(payload, requestId, session) {
       `UPDATE requests
        SET client_id = $2,
            seller_user_id = $3,
-           request_date = $4,
-           deadline_date = $5,
+           request_date = $4::date,
+           deadline_date = $5::date,
            branch_name = $6,
            lead_source = $7,
            initial_note = $8,
@@ -7884,6 +7926,7 @@ const server = http.createServer(async (request, response) => {
         message: "Proposta gerada com sucesso.",
         proposalNumber: created
       });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "proposal-number", action: "create", proposalRegistryId: created.id || null });
       return;
     }
 
@@ -7899,6 +7942,7 @@ const server = http.createServer(async (request, response) => {
         message: "Proposta atualizada com sucesso.",
         proposalNumber: updated
       });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "proposal-number", action: "update", proposalRegistryId: proposalId });
       return;
     }
 
@@ -7911,6 +7955,7 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 200, {
         message: `Numero ${removed.proposalNumberDisplay} excluido com sucesso.`
       });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "proposal-number", action: "delete", proposalRegistryId: proposalId });
       return;
     }
 
@@ -8119,6 +8164,19 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/events") {
+      assertAuthenticated(session);
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive"
+      });
+      response.write(": connected\n\n");
+      const realtimeClient = registerRealtimeClient(response, session);
+      request.on("close", () => unregisterRealtimeClient(realtimeClient));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/requests") {
       assertAuthenticated(session);
       assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
@@ -8131,6 +8189,7 @@ const server = http.createServer(async (request, response) => {
         request: created,
         requestNumber: created.requestNumber
       });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "request", action: "create", requestId: created.id || null });
       return;
     }
 
@@ -8153,6 +8212,7 @@ const server = http.createServer(async (request, response) => {
         request: updated,
         returnedToTriage: updated.returnedToTriage
       });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "request", action: "update", requestId: updated.id || requestId });
       return;
     }
 
@@ -8180,6 +8240,7 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 200, {
         message: `Solicitacao ${removed.requestNumber} excluida com sucesso.`
       });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "request", action: "delete", requestId });
       return;
     }
 
@@ -8247,6 +8308,7 @@ const server = http.createServer(async (request, response) => {
       const payload = JSON.parse(body || "{}");
       await saveProposalRecord(payload, session);
       sendJson(response, 200, { message: "Triagem salva com sucesso." });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "proposal-record", action: "update", requestId: payload.requestId || null });
       return;
     }
 
@@ -8258,6 +8320,7 @@ const server = http.createServer(async (request, response) => {
       const payload = JSON.parse(body || "{}");
       await saveCommercialRecord(payload, session);
       sendJson(response, 200, { message: "Negociacao salva com sucesso." });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "commercial-record", action: "update", requestId: payload.requestId || null });
       return;
     }
 
@@ -8271,6 +8334,7 @@ const server = http.createServer(async (request, response) => {
       payload.proposalRegistryId = proposalRegistryId;
       await saveCommercialRecord(payload, session);
       sendJson(response, 200, { message: "Negociacao salva com sucesso." });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "commercial-record", action: "update", proposalRegistryId });
       return;
     }
 
@@ -8282,6 +8346,7 @@ const server = http.createServer(async (request, response) => {
       const payload = JSON.parse(body || "{}");
       await saveContractRecord(payload, session);
       sendJson(response, 200, { message: "Contratual salvo com sucesso." });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "contract-record", action: "update", requestId: payload.requestId || null });
       return;
     }
 
@@ -8295,6 +8360,7 @@ const server = http.createServer(async (request, response) => {
       payload.proposalRegistryId = proposalRegistryId;
       await saveContractRecord(payload, session);
       sendJson(response, 200, { message: "Contratual salvo com sucesso." });
+      broadcastRealtimeEvent("crm-data-updated", { entity: "contract-record", action: "update", proposalRegistryId });
       return;
     }
 
