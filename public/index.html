@@ -1160,10 +1160,12 @@
 
           <div class="form-block">
             <h3>Dados cadastrais do cliente</h3>
+            <input id="request-client-id" name="clientId" type="hidden" />
             <div class="form-grid">
               <div class="control control-span-3">
                 <label for="legal-name">Razao social</label>
                 <input id="legal-name" name="legalName" />
+                <div id="client-match-panel" class="preview-box compact" style="display:none; margin-top:12px;"></div>
               </div>
               <div class="control control-span-2">
                 <label for="trade-name">Nome fantasia</label>

@@ -1510,6 +1510,37 @@ async function ensureRequestDocumentationColumns() {
   `);
 }
 
+async function ensureClientReferenceTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS client_cnpjs (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      cnpj TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_client_cnpjs_value
+    ON client_cnpjs(client_id, cnpj)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS client_addresses (
+      id BIGSERIAL PRIMARY KEY,
+      client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      address TEXT,
+      address_number TEXT,
+      address_complement TEXT,
+      district TEXT,
+      city TEXT,
+      state TEXT,
+      zip_code TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
 async function ensureAttachmentHashColumn() {
   await query(`
     ALTER TABLE attachments
@@ -3481,6 +3512,279 @@ async function replaceClientContacts(client, clientId, payload) {
   }
 }
 
+async function appendClientCnpjRecord(client, clientId, cnpj) {
+  const normalizedCnpj = String(cnpj || "").trim();
+  if (!normalizedCnpj) return;
+
+  await client.query(
+    `INSERT INTO client_cnpjs (client_id, cnpj)
+     VALUES ($1, $2)
+     ON CONFLICT (client_id, cnpj) DO NOTHING`,
+    [clientId, normalizedCnpj]
+  );
+}
+
+async function appendClientAddressRecord(client, clientId, payload) {
+  const addressPayload = {
+    address: String(payload.address || "").trim() || null,
+    addressNumber: String(payload.addressNumber || "").trim() || null,
+    addressComplement: String(payload.addressComplement || "").trim() || null,
+    district: String(payload.district || "").trim() || null,
+    city: String(payload.city || "").trim() || null,
+    state: String(payload.state || "").trim() || null,
+    zipCode: String(payload.zipCode || "").trim() || null
+  };
+
+  if (!Object.values(addressPayload).some(Boolean)) {
+    return;
+  }
+
+  const existingAddress = await client.query(
+    `SELECT id
+     FROM client_addresses
+     WHERE client_id = $1
+       AND address IS NOT DISTINCT FROM $2
+       AND address_number IS NOT DISTINCT FROM $3
+       AND address_complement IS NOT DISTINCT FROM $4
+       AND district IS NOT DISTINCT FROM $5
+       AND city IS NOT DISTINCT FROM $6
+       AND state IS NOT DISTINCT FROM $7
+       AND zip_code IS NOT DISTINCT FROM $8
+     LIMIT 1`,
+    [
+      clientId,
+      addressPayload.address,
+      addressPayload.addressNumber,
+      addressPayload.addressComplement,
+      addressPayload.district,
+      addressPayload.city,
+      addressPayload.state,
+      addressPayload.zipCode
+    ]
+  );
+
+  if (existingAddress.rows[0]) return;
+
+  await client.query(
+    `INSERT INTO client_addresses (
+      client_id, address, address_number, address_complement, district, city, state, zip_code
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      clientId,
+      addressPayload.address,
+      addressPayload.addressNumber,
+      addressPayload.addressComplement,
+      addressPayload.district,
+      addressPayload.city,
+      addressPayload.state,
+      addressPayload.zipCode
+    ]
+  );
+}
+
+async function syncClientReferenceRecords(client, clientId, payload) {
+  await appendClientCnpjRecord(client, clientId, payload.cnpj);
+  await appendClientAddressRecord(client, clientId, payload);
+}
+
+async function updateClientMasterRecord(client, clientId, payload, preserveExisting = true) {
+  await client.query(
+    `UPDATE clients
+     SET legal_name = COALESCE($2, legal_name),
+         trade_name = COALESCE($3, trade_name),
+         cnpj = CASE
+           WHEN $4 IS NULL AND $13 THEN cnpj
+           ELSE $4
+         END,
+         industry_segment = CASE
+           WHEN $5 IS NULL AND $13 THEN industry_segment
+           ELSE $5
+         END,
+         main_email = CASE
+           WHEN $6 IS NULL AND $13 THEN main_email
+           ELSE $6
+         END,
+         address = CASE
+           WHEN $7 IS NULL AND $13 THEN address
+           ELSE $7
+         END,
+         address_number = CASE
+           WHEN $8 IS NULL AND $13 THEN address_number
+           ELSE $8
+         END,
+         address_complement = CASE
+           WHEN $9 IS NULL AND $13 THEN address_complement
+           ELSE $9
+         END,
+         district = CASE
+           WHEN $10 IS NULL AND $13 THEN district
+           ELSE $10
+         END,
+         city = COALESCE($11, city),
+         state = COALESCE($12, state),
+         zip_code = CASE
+           WHEN $14 IS NULL AND $13 THEN zip_code
+           ELSE $14
+         END
+     WHERE id = $1`,
+    [
+      clientId,
+      toUpperOrNull(payload.legalName),
+      toUpperOrNull(payload.tradeName),
+      payload.cnpj || null,
+      payload.industrySegment || null,
+      payload.mainEmail || null,
+      payload.address || null,
+      payload.addressNumber || null,
+      payload.addressComplement || null,
+      payload.district || null,
+      payload.city || null,
+      payload.state || null,
+      preserveExisting,
+      payload.zipCode || null
+    ]
+  );
+
+  await syncClientReferenceRecords(client, clientId, payload);
+}
+
+async function resolveClientForRequest(client, payload) {
+  const payloadClientId = Number(payload.clientId || 0);
+  if (Number.isFinite(payloadClientId) && payloadClientId > 0) {
+    const existingClient = await client.query(
+      `SELECT id
+       FROM clients
+       WHERE id = $1`,
+      [payloadClientId]
+    );
+
+    if (!existingClient.rows[0]) {
+      throw new Error("Cliente vinculado nao encontrado.");
+    }
+
+    await updateClientMasterRecord(client, payloadClientId, payload, true);
+    await replaceClientContacts(client, payloadClientId, payload);
+    return payloadClientId;
+  }
+
+  const clientResult = await client.query(
+    `INSERT INTO clients (
+      legal_name, trade_name, cnpj, industry_segment, main_email,
+      address, address_number, address_complement, district, city, state, zip_code
+    ) VALUES (
+      $1, $2, $3, $4, $5,
+      $6, $7, $8, $9, $10, $11, $12
+    ) RETURNING id`,
+    [
+      toUpperOrNull(payload.legalName),
+      toUpperOrNull(payload.tradeName),
+      payload.cnpj || null,
+      payload.industrySegment || null,
+      payload.mainEmail || null,
+      payload.address || null,
+      payload.addressNumber || null,
+      payload.addressComplement || null,
+      payload.district || null,
+      payload.city,
+      payload.state,
+      payload.zipCode || null
+    ]
+  );
+
+  const clientId = clientResult.rows[0].id;
+  await replaceClientContacts(client, clientId, payload);
+  await syncClientReferenceRecords(client, clientId, payload);
+  return clientId;
+}
+
+async function listClientMatches(term, session) {
+  const normalizedTerm = String(term || "").trim();
+  if (normalizedTerm.length < 3) return [];
+
+  const values = [`%${normalizedTerm}%`, session?.email || null];
+  const result = await query(
+    `SELECT
+       c.id,
+       UPPER(c.legal_name) AS "legalName",
+       UPPER(COALESCE(c.trade_name, '')) AS "tradeName",
+       c.cnpj,
+       c.main_email AS "mainEmail",
+       c.address,
+       c.address_number AS "addressNumber",
+       c.address_complement AS "addressComplement",
+       c.district,
+       c.city,
+       c.state,
+       c.zip_code AS "zipCode",
+       primary_contact.name AS "primaryContactName",
+       primary_contact.job_title AS "primaryContactRole",
+       primary_contact.email AS "primaryContactEmail",
+       primary_contact.phone AS "primaryContactPhone",
+       COUNT(r.id)::int AS "requestCount",
+       COUNT(r.id) FILTER (WHERE LOWER(COALESCE(seller_user.email, '')) = LOWER(COALESCE($2, '')))::int AS "ownRequestCount",
+       COALESCE(
+         STRING_AGG(DISTINCT seller_user.name, ', ' ORDER BY seller_user.name)
+           FILTER (WHERE seller_user.name IS NOT NULL),
+         ''
+       ) AS "sellerNames"
+     FROM clients c
+     LEFT JOIN requests r ON r.client_id = c.id
+     LEFT JOIN users seller_user ON seller_user.id = r.seller_user_id
+     LEFT JOIN LATERAL (
+       SELECT name, job_title, email, phone
+       FROM client_contacts
+       WHERE client_id = c.id
+       ORDER BY is_primary DESC, id ASC
+       LIMIT 1
+     ) primary_contact ON TRUE
+     WHERE c.legal_name ILIKE $1
+        OR COALESCE(c.trade_name, '') ILIKE $1
+     GROUP BY
+       c.id,
+       c.legal_name,
+       c.trade_name,
+       c.cnpj,
+       c.main_email,
+       c.address,
+       c.address_number,
+       c.address_complement,
+       c.district,
+       c.city,
+       c.state,
+       c.zip_code,
+       primary_contact.name,
+       primary_contact.job_title,
+       primary_contact.email,
+       primary_contact.phone
+     ORDER BY COUNT(r.id) DESC, c.legal_name ASC
+     LIMIT 8`,
+    values
+  );
+
+  return result.rows.map((row) => {
+    const sellerNames = String(row.sellerNames || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    let warningMessage = "";
+    if (Number(row.ownRequestCount || 0) > 0) {
+      warningMessage = Number(row.ownRequestCount) === 1
+        ? "Você já tem um negócio com este cliente."
+        : `Você já tem ${row.ownRequestCount} negócios com este cliente.`;
+    } else if (sellerNames.length === 1) {
+      warningMessage = `O vendedor ${sellerNames[0]} já tem negócio com este cliente.`;
+    } else if (sellerNames.length > 1) {
+      warningMessage = `Já existem negócios com este cliente: ${sellerNames.join(", ")}.`;
+    }
+
+    return {
+      ...row,
+      warningMessage
+    };
+  });
+}
+
 async function replaceRequestStructure(client, requestId, payload) {
   const normalizedPayload = dedupeRequestStructurePayload(payload);
   await client.query("DELETE FROM request_services WHERE request_id = $1", [requestId]);
@@ -3593,32 +3897,7 @@ async function createRequest(payload, session) {
     const sellerUserId = await ensureUser(client, payload.sellerName, payload.sellerEmail);
     const stageId = await getStageId(client, "em_triagem");
 
-    const clientResult = await client.query(
-      `INSERT INTO clients (
-        legal_name, trade_name, cnpj, industry_segment, main_email,
-        address, address_number, address_complement, district, city, state, zip_code
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11, $12
-      ) RETURNING id`,
-        [
-          toUpperOrNull(payload.legalName),
-          toUpperOrNull(payload.tradeName),
-          payload.cnpj || null,
-          payload.industrySegment || null,
-        payload.mainEmail || null,
-        payload.address || null,
-        payload.addressNumber || null,
-        payload.addressComplement || null,
-        payload.district || null,
-        payload.city,
-        payload.state,
-        payload.zipCode || null
-      ]
-    );
-
-    const clientId = clientResult.rows[0].id;
-    await replaceClientContacts(client, clientId, payload);
+    const clientId = await resolveClientForRequest(client, payload);
 
     const requestNumber = await generateRequestNumber(client);
 
@@ -3774,55 +4053,38 @@ async function updateRequest(payload, requestId, session) {
 
     const sellerUserId = await ensureUser(client, payload.sellerName, payload.sellerEmail);
 
-    await client.query(
-      `UPDATE clients
-       SET legal_name = $2,
-           trade_name = $3,
-           cnpj = $4,
-           industry_segment = $5,
-           main_email = $6,
-           address = $7,
-           address_number = $8,
-           address_complement = $9,
-           district = $10,
-           city = $11,
-           state = $12,
-           zip_code = $13
-       WHERE id = $1`,
-      [
-        existing.clientId,
-        toUpperOrNull(payload.legalName),
-        toUpperOrNull(payload.tradeName),
-        payload.cnpj || null,
-        payload.industrySegment || null,
-        payload.mainEmail || null,
-        payload.address || null,
-        payload.addressNumber || null,
-        payload.addressComplement || null,
-        payload.district || null,
-        payload.city,
-        payload.state,
-        payload.zipCode || null
-      ]
-    );
-
-    await replaceClientContacts(client, existing.clientId, payload);
+    const resolvedClientId = Number(payload.clientId || existing.clientId || 0) || existing.clientId;
+    if (resolvedClientId !== existing.clientId) {
+      const targetClient = await client.query(
+        `SELECT id
+         FROM clients
+         WHERE id = $1`,
+        [resolvedClientId]
+      );
+      if (!targetClient.rows[0]) {
+        throw new Error("Cliente vinculado nao encontrado.");
+      }
+    }
+    await updateClientMasterRecord(client, resolvedClientId, payload, true);
+    await replaceClientContacts(client, resolvedClientId, payload);
 
     await client.query(
       `UPDATE requests
-       SET seller_user_id = $2,
-           request_date = $3,
-           deadline_date = $4,
-           branch_name = $5,
-           lead_source = $6,
-           initial_note = $7,
-           general_notes = $8,
-           technical_doc_notes = $9,
-           required_documents_notes = $10,
+       SET client_id = $2,
+           seller_user_id = $3,
+           request_date = $4,
+           deadline_date = $5,
+           branch_name = $6,
+           lead_source = $7,
+           initial_note = $8,
+           general_notes = $9,
+           technical_doc_notes = $10,
+           required_documents_notes = $11,
            updated_at = NOW()
        WHERE id = $1`,
       [
         requestId,
+        resolvedClientId,
         sellerUserId,
         payload.requestDate,
         payload.deadlineDate,
@@ -7386,6 +7648,14 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/clients/search") {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
+      const matches = await listClientMatches(url.searchParams.get("term"), session);
+      sendJson(response, 200, { matches });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/proposal-numbers") {
       assertAuthenticated(session);
       assertModuleAccess(session, "proposta", "Seu usuario nao tem acesso ao modulo proposta.");
@@ -7979,6 +8249,7 @@ ensurePasswordColumn()
   .then(() => ensureWorkflowStageAccessColumn())
   .then(() => ensureRequestSubmissionKeyColumn())
   .then(() => ensureRequestDocumentationColumns())
+  .then(() => ensureClientReferenceTables())
   .then(() => ensureAttachmentHashColumn())
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureWorkflowStageNames())

@@ -324,6 +324,10 @@ let proposalNumberRowsCache = [];
 let proposalNumberAllRowsCache = [];
 let crmProposalRequestsCache = [];
 let requestSaveInFlight = false;
+let clientMatchSearchTimer = null;
+let clientMatchRequestToken = 0;
+let clientMatchResultsCache = [];
+let selectedExistingClient = null;
 let proposalNumberSaveInFlight = false;
 let proposalSaveInFlight = false;
 let commercialSaveInFlight = false;
@@ -373,6 +377,167 @@ async function fetchWithSession(url, options = {}) {
   const headers = new Headers(options.headers || {});
   Object.entries(sessionHeaders()).forEach(([key, value]) => headers.set(key, value));
   return fetch(url, { ...options, headers });
+}
+
+function normalizeClientName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function getRequestClientLinkInput() {
+  return document.getElementById("request-client-id");
+}
+
+function buildSelectedClientFromDetail(detail) {
+  if (!detail?.clientId) return null;
+  return {
+    id: detail.clientId,
+    legalName: detail.legalName || detail.company || "",
+    tradeName: detail.tradeName || "",
+    cnpj: detail.cnpj || "",
+    mainEmail: detail.mainEmail || "",
+    address: detail.address || "",
+    addressNumber: detail.addressNumber || "",
+    addressComplement: detail.addressComplement || "",
+    district: detail.district || "",
+    city: detail.city || "",
+    state: detail.state || "",
+    zipCode: detail.zipCode || "",
+    primaryContactName: detail.primaryContactName || "",
+    primaryContactRole: detail.primaryContactRole || "",
+    primaryContactEmail: detail.primaryContactEmail || "",
+    primaryContactPhone: detail.primaryContactPhone || "",
+    warningMessage: "",
+    requestCount: detail.requestCount || 0,
+    ownRequestCount: detail.ownRequestCount || 0,
+    sellerNames: detail.seller || ""
+  };
+}
+
+function renderClientMatchPanel({ loading = false, matches = null } = {}) {
+  const panel = document.getElementById("client-match-panel");
+  if (!panel) return;
+
+  if (loading) {
+    panel.style.display = "";
+    panel.innerHTML = `<div class="muted">Buscando clientes já cadastrados...</div>`;
+    return;
+  }
+
+  if (selectedExistingClient) {
+    panel.style.display = "";
+    panel.innerHTML = `
+      <div class="list-item">
+        <div class="list-top">
+          <strong>Cliente vinculado: ${escapeHtml(selectedExistingClient.legalName || "-")}</strong>
+          <button type="button" class="secondary" data-client-action="unlink">Desvincular</button>
+        </div>
+        <div class="muted">
+          Novo negócio será criado dentro deste cadastro.
+          ${selectedExistingClient.city || selectedExistingClient.state ? ` ${escapeHtml([selectedExistingClient.city, selectedExistingClient.state].filter(Boolean).join(" / "))}` : ""}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const safeMatches = Array.isArray(matches) ? matches : clientMatchResultsCache;
+  if (!safeMatches.length) {
+    panel.style.display = "none";
+    panel.innerHTML = "";
+    return;
+  }
+
+  panel.style.display = "";
+  panel.innerHTML = `
+    <div class="muted" style="margin-bottom:8px;">Clientes parecidos encontrados. Você pode reaproveitar um cadastro existente ou seguir com um novo.</div>
+    ${safeMatches.map((match, index) => `
+      <div class="list-item">
+        <div class="list-top">
+          <strong>${escapeHtml(match.legalName || "-")}</strong>
+          <button type="button" class="secondary" data-client-action="select" data-client-index="${index}">Usar este cliente</button>
+        </div>
+        <div class="muted">
+          ${escapeHtml([
+            match.tradeName ? `Fantasia: ${match.tradeName}` : "",
+            match.city ? `${match.city}/${match.state || ""}` : "",
+            match.cnpj ? `CNPJ: ${match.cnpj}` : ""
+          ].filter(Boolean).join(" | ") || "Cadastro existente")}
+        </div>
+        <div class="muted">
+          ${escapeHtml(match.warningMessage || `${match.requestCount || 0} negócios já cadastrados para este cliente.`)}
+        </div>
+      </div>
+    `).join("")}
+  `;
+}
+
+function fillRequestFormWithClient(match) {
+  document.getElementById("legal-name").value = match.legalName || "";
+  document.getElementById("trade-name").value = match.tradeName || "";
+  document.getElementById("cnpj").value = match.cnpj || "";
+  document.getElementById("main-email").value = match.mainEmail || "";
+  document.getElementById("address").value = match.address || "";
+  document.getElementById("address-number").value = match.addressNumber || "";
+  document.getElementById("address-complement").value = match.addressComplement || "";
+  document.getElementById("district").value = match.district || "";
+  document.getElementById("city").value = match.city || "";
+  document.getElementById("state").value = match.state || "";
+  document.getElementById("zip-code").value = match.zipCode || "";
+  document.getElementById("primary-contact-name").value = match.primaryContactName || "";
+  document.getElementById("primary-contact-role").value = match.primaryContactRole || "";
+  document.getElementById("primary-contact-email").value = match.primaryContactEmail || "";
+  document.getElementById("primary-contact-phone").value = match.primaryContactPhone || "";
+}
+
+function selectExistingClient(match) {
+  selectedExistingClient = match ? { ...match } : null;
+  getRequestClientLinkInput().value = selectedExistingClient?.id || "";
+  if (selectedExistingClient) {
+    fillRequestFormWithClient(selectedExistingClient);
+  }
+  renderClientMatchPanel({ matches: [] });
+}
+
+function clearSelectedExistingClient({ preserveTypedName = false } = {}) {
+  const currentLegalName = document.getElementById("legal-name").value;
+  selectedExistingClient = null;
+  getRequestClientLinkInput().value = "";
+  clientMatchResultsCache = [];
+  if (!preserveTypedName) {
+    document.getElementById("legal-name").value = currentLegalName;
+  }
+  renderClientMatchPanel({ matches: [] });
+}
+
+async function searchExistingClients(term) {
+  const normalizedTerm = String(term || "").trim();
+  if (normalizedTerm.length < 3) {
+    clientMatchResultsCache = [];
+    renderClientMatchPanel({ matches: [] });
+    return;
+  }
+
+  const requestToken = ++clientMatchRequestToken;
+  renderClientMatchPanel({ loading: true });
+  try {
+    const response = await fetchWithSession(`/api/clients/search?term=${encodeURIComponent(normalizedTerm)}`);
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Falha ao buscar clientes.");
+    }
+    if (requestToken !== clientMatchRequestToken) return;
+    clientMatchResultsCache = result.matches || [];
+    renderClientMatchPanel({ matches: clientMatchResultsCache });
+  } catch (error) {
+    if (requestToken !== clientMatchRequestToken) return;
+    clientMatchResultsCache = [];
+    renderClientMatchPanel({ matches: [] });
+  }
 }
 
 function renderMetrics(metrics) {
@@ -2381,10 +2546,14 @@ function resetRequestForm() {
   const form = document.getElementById("request-form");
   form.reset();
   document.getElementById("request-id").value = "";
+  document.getElementById("request-client-id").value = "";
   document.getElementById("request-submission-key").value = generateRequestSubmissionKey();
   document.getElementById("request-form-preview").textContent = "";
   document.getElementById("save-request-button").dataset.idleLabel = "Salvar solicitacao";
   setRequestSaveState(false);
+  selectedExistingClient = null;
+  clientMatchResultsCache = [];
+  renderClientMatchPanel({ matches: [] });
   renderPendingRequestBlock(null);
   setCheckedValues("serviceType", []);
   setCheckedValues("transportOption", []);
@@ -2401,6 +2570,7 @@ function populateRequestForm(detail) {
   renderServiceOperationGroups([], []);
   renderPendingRequestBlock(null);
   document.getElementById("request-id").value = detail.id || "";
+  document.getElementById("request-client-id").value = detail.clientId || "";
   document.getElementById("request-submission-key").value = detail.id ? "" : generateRequestSubmissionKey();
   document.getElementById("request-date").value = detail.requestDateIso || "";
   document.getElementById("deadline-date").value = detail.deadlineDateIso || "";
@@ -2437,6 +2607,9 @@ function populateRequestForm(detail) {
   document.getElementById("general-notes").value = detail.generalNotes || "";
   document.getElementById("technical-doc-notes").value = detail.technicalDocNotes || "";
   document.getElementById("required-documents-notes").value = detail.requiredDocumentsNotes || "";
+  selectedExistingClient = buildSelectedClientFromDetail(detail);
+  clientMatchResultsCache = [];
+  renderClientMatchPanel({ matches: [] });
   document.getElementById("save-request-button").dataset.idleLabel = detail.stageCode === "aguardando_informacoes"
     ? "Salvar correções e devolver para triagem"
     : "Salvar solicitacao";
@@ -2594,6 +2767,7 @@ async function buildRequestPayload() {
 
   return {
     requestId: data.get("requestId"),
+    clientId: data.get("clientId"),
     submissionKey: data.get("submissionKey"),
     requestDate: data.get("requestDate"),
     deadlineDate: data.get("deadlineDate"),
@@ -2662,6 +2836,7 @@ async function renderRequestFormPreview() {
   const operationSummary = buildServiceOperationSummary(payload.posts, payload.equipments);
 
   const preview = `Razao social: ${payload.legalName || "-"}
+Cliente vinculado: ${payload.clientId || "Novo cadastro"}
 Nome fantasia: ${payload.tradeName || "-"}
 CNPJ: ${payload.cnpj || "-"}
 Email de faturamento: ${payload.mainEmail || "-"}
@@ -2900,6 +3075,40 @@ function setupRequestForm() {
   document.getElementById("request-form").addEventListener("change", (event) => {
     if (event.target.name === "serviceType") {
       syncServiceOperationGroups();
+    }
+  });
+  document.getElementById("legal-name").addEventListener("input", (event) => {
+    const value = String(event.target.value || "");
+    if (selectedExistingClient) {
+      const selectedName = normalizeClientName(selectedExistingClient.legalName || selectedExistingClient.tradeName || "");
+      if (normalizeClientName(value) !== selectedName) {
+        clearSelectedExistingClient({ preserveTypedName: true });
+      }
+    }
+    window.clearTimeout(clientMatchSearchTimer);
+    clientMatchSearchTimer = window.setTimeout(() => {
+      searchExistingClients(value);
+    }, 300);
+  });
+  document.getElementById("trade-name").addEventListener("input", () => {
+    if (selectedExistingClient) {
+      renderClientMatchPanel({ matches: [] });
+    }
+  });
+  document.getElementById("client-match-panel").addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-client-action]");
+    if (!actionButton) return;
+    const action = actionButton.dataset.clientAction;
+    if (action === "unlink") {
+      clearSelectedExistingClient({ preserveTypedName: true });
+      return;
+    }
+    if (action === "select") {
+      const selectedIndex = Number(actionButton.dataset.clientIndex || -1);
+      const selectedMatch = clientMatchResultsCache[selectedIndex];
+      if (selectedMatch) {
+        selectExistingClient(selectedMatch);
+      }
     }
   });
   document.getElementById("preview-request-form").addEventListener("click", async () => {
