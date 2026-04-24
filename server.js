@@ -558,7 +558,7 @@ function serveFile(response, filePath) {
 
 function serveDownload(response, filePath, downloadName, mimeType) {
   if (isRemoteStoragePath(filePath)) {
-    response.writeHead(302, { Location: filePath });
+    response.writeHead(302, { Location: buildRemoteDownloadUrl(filePath, downloadName, mimeType) });
     response.end();
     return;
   }
@@ -684,6 +684,75 @@ function isRemoteStoragePath(filePath) {
   return /^https?:\/\//i.test(String(filePath || "").trim());
 }
 
+function isDocumentMimeType(mimeType) {
+  const value = String(mimeType || "").toLowerCase();
+  return [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/csv",
+    "text/plain",
+    "application/zip",
+    "application/x-rar-compressed",
+    "application/octet-stream"
+  ].includes(value);
+}
+
+function isDocumentExtension(fileName) {
+  const ext = path.extname(String(fileName || "")).toLowerCase();
+  return [
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".csv",
+    ".txt",
+    ".zip",
+    ".rar"
+  ].includes(ext);
+}
+
+function resolveCloudinaryResourceType(file = {}) {
+  const mimeType = String(file.mimeType || "").toLowerCase();
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/") || mimeType.startsWith("audio/")) return "video";
+  if (isDocumentMimeType(mimeType) || isDocumentExtension(file.fileName)) return "raw";
+  return "auto";
+}
+
+function buildRemoteDownloadUrl(filePath, downloadName, mimeType) {
+  const urlText = String(filePath || "").trim();
+  if (!urlText) return urlText;
+
+  try {
+    const remoteUrl = new URL(urlText);
+    if (!/cloudinary\.com$/i.test(remoteUrl.hostname)) {
+      return urlText;
+    }
+
+    const isDocument = isDocumentMimeType(mimeType) || isDocumentExtension(downloadName || remoteUrl.pathname);
+    if (!isDocument) {
+      return urlText;
+    }
+
+    const uploadToken = "/upload/";
+    if (remoteUrl.pathname.includes(uploadToken) && !remoteUrl.pathname.includes("/upload/fl_attachment/")) {
+      remoteUrl.pathname = remoteUrl.pathname.replace(uploadToken, "/upload/fl_attachment/");
+    }
+
+    return remoteUrl.toString();
+  } catch (error) {
+    return urlText;
+  }
+}
+
 async function saveAttachmentFile(requestId, attachmentType, file) {
   if (!file?.contentBase64) return null;
 
@@ -691,7 +760,7 @@ async function saveAttachmentFile(requestId, attachmentType, file) {
 
   const result = await cloudinary.uploader.upload(dataUri, {
     folder: `uniseter/request-${requestId}`,
-    resource_type: "auto"
+    resource_type: resolveCloudinaryResourceType(file)
   });
 
   return result.secure_url;
@@ -704,7 +773,7 @@ async function saveModuleFile(moduleFolder, fileType, file) {
 
   const result = await cloudinary.uploader.upload(dataUri, {
     folder: `uniseter/${moduleFolder}`,
-    resource_type: "auto"
+    resource_type: resolveCloudinaryResourceType(file)
   });
 
   return result.secure_url;
