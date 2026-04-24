@@ -1773,6 +1773,14 @@ function renderAttachmentList(containerId, items, allowedTypes = []) {
   const filtered = allowedTypes.length
     ? items.filter((item) => allowedTypes.includes(item.attachmentType))
     : items;
+  const permissions = rolePermissions(currentRole);
+  const canDelete = Boolean(
+    permissions.createRequest
+    || permissions.saveProposal
+    || permissions.saveCommercial
+    || permissions.saveContract
+    || permissions.manageUsers
+  );
 
   if (!filtered.length) {
     container.innerHTML = "Nenhum arquivo disponivel.";
@@ -1787,7 +1795,10 @@ function renderAttachmentList(containerId, items, allowedTypes = []) {
         <strong>${item.fileName}</strong>
         <span>${item.attachmentLabel} | ${item.createdAt}</span>
       </div>
-      <a class="attachment-link" href="/api/attachments/${item.id}/download?${sessionQueryString()}" target="_blank" rel="noopener noreferrer">Baixar</a>
+      <div class="attachment-actions">
+        <a class="attachment-link" href="/api/attachments/${item.id}/download?${sessionQueryString()}" target="_blank" rel="noopener noreferrer">Baixar</a>
+        ${canDelete ? `<button type="button" class="secondary danger attachment-delete-button" data-attachment-id="${item.id}" data-request-id="${item.requestId || selectedRequestId || ""}">Excluir</button>` : ""}
+      </div>
     </div>
   `).join("");
 }
@@ -3051,6 +3062,23 @@ async function loadJson(url) {
   return response.json();
 }
 
+async function deleteJson(url) {
+  const response = await fetchWithSession(url, { method: "DELETE" });
+  if (!response.ok) {
+    let message = `Falha ao excluir ${url}`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) {
+        message = payload.error;
+      }
+    } catch (error) {
+      // Keep the fallback message when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
 function normalizeTableFilterText(value) {
   return String(value || "")
     .normalize("NFD")
@@ -3450,6 +3478,22 @@ async function selectRequest(requestId) {
   return detail;
 }
 
+async function refreshAttachmentPanels(requestId) {
+  if (!requestId) return;
+  const attachments = await loadRequestAttachments(requestId);
+  renderAttachmentList("proposal-attachments", attachments, ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual"]);
+  renderAttachmentList("commercial-attachments", attachments, ["proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"]);
+  renderAttachmentList("contract-attachments", attachments, ["documentacao_contratual", "minuta_inicial", "contrato_assinado"]);
+}
+
+async function deleteAttachmentItem(attachmentId, requestId) {
+  if (!attachmentId) return;
+  await deleteJson(`/api/attachments/${attachmentId}`);
+  if (requestId) {
+    await refreshAttachmentPanels(requestId);
+  }
+}
+
 async function bootstrap() {
   setupRequestForm();
   organizeProposalModuleLayout();
@@ -3485,6 +3529,26 @@ async function bootstrap() {
       await markAllNotificationsAsRead();
     } catch (error) {
       alert(`Nao foi possivel marcar as notificacoes: ${error.message}`);
+    }
+  });
+
+  document.addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest(".attachment-delete-button");
+    if (!deleteButton) return;
+    event.preventDefault();
+
+    const attachmentId = Number(deleteButton.dataset.attachmentId);
+    const requestId = Number(deleteButton.dataset.requestId);
+    if (!attachmentId) return;
+
+    if (!window.confirm("Deseja excluir este anexo?")) {
+      return;
+    }
+
+    try {
+      await deleteAttachmentItem(attachmentId, Number.isFinite(requestId) ? requestId : selectedRequestId);
+    } catch (error) {
+      alert(`Nao foi possivel excluir o anexo: ${error.message}`);
     }
   });
 

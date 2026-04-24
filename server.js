@@ -1,5 +1,6 @@
 const cloudinary = require("cloudinary").v2;
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -530,6 +531,18 @@ function canDownloadAttachment(session, attachmentType) {
   return false;
 }
 
+function canDeleteAttachment(session, attachmentType) {
+  const role = session?.role || "vendedor";
+  const contractDocs = ["documentacao_contratual", "minuta_inicial", "contrato_assinado"];
+  const sellerDocs = ["anexo_inicial", "documento_tecnico_cliente", "documentacao_contratual", "proposta_final_pdf", "anexo_proposta_complementar", "planilha_aberta_proposta", "proposta_tecnica", "anexo_aceite"];
+
+  if (role === "administrador" || role === "comercial_interno") return true;
+  if (role === "propostas") return !contractDocs.includes(attachmentType);
+  if (role === "juridico") return contractDocs.includes(attachmentType);
+  if (role === "vendedor") return sellerDocs.includes(attachmentType);
+  return false;
+}
+
 function readBody(request) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -558,8 +571,7 @@ function serveFile(response, filePath) {
 
 function serveDownload(response, filePath, downloadName, mimeType) {
   if (isRemoteStoragePath(filePath)) {
-    response.writeHead(302, { Location: buildRemoteDownloadUrl(filePath, downloadName, mimeType) });
-    response.end();
+    serveRemoteDownload(response, filePath, downloadName, mimeType);
     return;
   }
 
@@ -574,6 +586,47 @@ function serveDownload(response, filePath, downloadName, mimeType) {
       "Content-Disposition": `attachment; filename="${encodeURIComponent(downloadName || path.basename(filePath))}"`
     });
     response.end(data);
+  });
+}
+
+function serveRemoteDownload(response, filePath, downloadName, mimeType, redirectCount = 0) {
+  if (redirectCount > 5) {
+    sendJson(response, 502, { error: "Nao foi possivel baixar o arquivo remoto." });
+    return;
+  }
+
+  let remoteUrl;
+  try {
+    remoteUrl = new URL(String(filePath || "").trim());
+  } catch (error) {
+    sendJson(response, 400, { error: "Endereco remoto do arquivo invalido." });
+    return;
+  }
+
+  const transport = remoteUrl.protocol === "https:" ? https : http;
+  const request = transport.get(remoteUrl, (remoteResponse) => {
+    if (remoteResponse.statusCode >= 300 && remoteResponse.statusCode < 400 && remoteResponse.headers.location) {
+      const nextUrl = new URL(remoteResponse.headers.location, remoteUrl).toString();
+      remoteResponse.resume();
+      serveRemoteDownload(response, nextUrl, downloadName, mimeType, redirectCount + 1);
+      return;
+    }
+
+    if ((remoteResponse.statusCode || 500) >= 400) {
+      remoteResponse.resume();
+      sendJson(response, 502, { error: "Nao foi possivel baixar o arquivo remoto." });
+      return;
+    }
+
+    response.writeHead(200, {
+      "Content-Type": mimeType || remoteResponse.headers["content-type"] || "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(downloadName || path.basename(remoteUrl.pathname))}"`
+    });
+    remoteResponse.pipe(response);
+  });
+
+  request.on("error", () => {
+    sendJson(response, 502, { error: "Nao foi possivel baixar o arquivo remoto." });
   });
 }
 
@@ -797,13 +850,28 @@ async function createAttachmentRecord(client, {
 }) {
   if (!file?.contentBase64) return null;
 
+  const fileHash = crypto.createHash("sha256").update(Buffer.from(file.contentBase64, "base64")).digest("hex");
+  const existing = await client.query(
+    `SELECT id
+     FROM attachments
+     WHERE request_id = $1
+       AND attachment_type = $2
+       AND file_hash = $3
+     LIMIT 1`,
+    [requestId, attachmentType, fileHash]
+  );
+
+  if (existing.rows[0]?.id) {
+    return existing.rows[0].id;
+  }
+
   const storagePath = await saveAttachmentFile(requestId, attachmentType, file);
 
   const result = await client.query(
     `INSERT INTO attachments (
       request_id, uploaded_by_user_id, attachment_type, file_name,
-      storage_path, mime_type, file_size, description
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      storage_path, mime_type, file_size, description, file_hash
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING id`,
     [
       requestId,
@@ -813,7 +881,8 @@ async function createAttachmentRecord(client, {
       storagePath,
       file.mimeType || null,
       file.fileSize || null,
-      description || null
+      description || null,
+      fileHash
     ]
   );
 
@@ -1438,6 +1507,19 @@ async function ensureRequestDocumentationColumns() {
     ALTER TABLE requests
     ADD COLUMN IF NOT EXISTS technical_doc_notes TEXT,
     ADD COLUMN IF NOT EXISTS required_documents_notes TEXT
+  `);
+}
+
+async function ensureAttachmentHashColumn() {
+  await query(`
+    ALTER TABLE attachments
+    ADD COLUMN IF NOT EXISTS file_hash VARCHAR(128)
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_attachments_request_type_hash
+    ON attachments(request_id, attachment_type, file_hash)
+    WHERE file_hash IS NOT NULL
   `);
 }
 
@@ -6000,6 +6082,7 @@ async function listRequestAttachments(requestId) {
   const result = await query(
     `SELECT
        id,
+       request_id AS "requestId",
        attachment_type AS "attachmentType",
        file_name AS "fileName",
        mime_type AS "mimeType",
@@ -6074,6 +6157,60 @@ async function getAttachmentById(attachmentId) {
   );
 
   return result.rows[0] || null;
+}
+
+async function deleteAttachment(attachmentId, session) {
+  return withTransaction(async (client) => {
+    const result = await client.query(
+      `SELECT
+         id,
+         request_id AS "requestId",
+         file_name AS "fileName",
+         storage_path AS "storagePath",
+         attachment_type AS "attachmentType"
+       FROM attachments
+       WHERE id = $1`,
+      [attachmentId]
+    );
+
+    const attachment = result.rows[0];
+    if (!attachment) {
+      const error = new Error("Anexo nao encontrado.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await assertRequestAccessByClient(client, attachment.requestId, session);
+    if (!canDeleteAttachment(session, attachment.attachmentType)) {
+      const error = new Error("Seu perfil nao pode excluir este tipo de anexo.");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    await client.query(
+      `UPDATE proposal_records
+       SET final_pdf_attachment_id = NULL
+       WHERE final_pdf_attachment_id = $1`,
+      [attachmentId]
+    );
+    await client.query(
+      `UPDATE commercial_records
+       SET acceptance_attachment_id = NULL
+       WHERE acceptance_attachment_id = $1`,
+      [attachmentId]
+    );
+    await client.query(
+      `UPDATE contract_records
+       SET initial_draft_attachment_id = CASE WHEN initial_draft_attachment_id = $1 THEN NULL ELSE initial_draft_attachment_id END,
+           signed_contract_attachment_id = CASE WHEN signed_contract_attachment_id = $1 THEN NULL ELSE signed_contract_attachment_id END
+       WHERE initial_draft_attachment_id = $1
+          OR signed_contract_attachment_id = $1`,
+      [attachmentId]
+    );
+    await client.query("DELETE FROM attachments WHERE id = $1", [attachmentId]);
+
+    return attachment;
+  });
 }
 
 async function saveProposalRecord(payload, session) {
@@ -7755,6 +7892,39 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "DELETE" && /\/api\/attachments\/\d+$/.test(url.pathname)) {
+      assertAuthenticated(session);
+      assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
+
+      const attachmentId = Number(url.pathname.split("/")[3]);
+      if (!Number.isFinite(attachmentId)) {
+        sendJson(response, 400, { error: "Identificador do anexo invalido." });
+        return;
+      }
+
+      const removed = await deleteAttachment(attachmentId, session);
+
+      if (!isRemoteStoragePath(removed.storagePath)) {
+        try {
+          const resolvedPath = path.isAbsolute(removed.storagePath)
+            ? removed.storagePath
+            : path.resolve(removed.storagePath);
+          if (fs.existsSync(resolvedPath)) {
+            fs.unlinkSync(resolvedPath);
+          }
+        } catch (error) {
+          console.warn("Nao foi possivel remover o arquivo fisico do anexo:", error.message);
+        }
+      }
+
+      sendJson(response, 200, {
+        message: `Anexo ${removed.fileName} excluido com sucesso.`,
+        attachmentId: removed.id,
+        requestId: removed.requestId
+      });
+      return;
+    }
+
     if (request.method === "GET" && /\/api\/requests\/\d+\/attachments$/.test(url.pathname)) {
       assertAuthenticated(session);
       assertModuleAccess(session, "crm", "Seu usuario nao tem acesso aos modulos operacionais.");
@@ -7809,6 +7979,7 @@ ensurePasswordColumn()
   .then(() => ensureWorkflowStageAccessColumn())
   .then(() => ensureRequestSubmissionKeyColumn())
   .then(() => ensureRequestDocumentationColumns())
+  .then(() => ensureAttachmentHashColumn())
   .then(() => ensureWorkflowStageColumns())
   .then(() => ensureWorkflowStageNames())
   .then(() => ensureAppLookupOptionsTable())
