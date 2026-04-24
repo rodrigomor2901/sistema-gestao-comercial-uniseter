@@ -3904,7 +3904,16 @@ async function listClientMatches(term, session) {
   const normalizedTerm = String(term || "").trim();
   if (normalizedTerm.length < 3) return [];
 
-  const values = [`%${normalizedTerm}%`, session?.email || null];
+  const normalizedLooseTerm = normalizedTerm
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  const values = [
+    `%${normalizedTerm}%`,
+    session?.email || null,
+    normalizedLooseTerm ? `%${normalizedLooseTerm}%` : ""
+  ];
   const result = await query(
     `SELECT
        c.id,
@@ -3942,6 +3951,30 @@ async function listClientMatches(term, session) {
      ) primary_contact ON TRUE
      WHERE c.legal_name ILIKE $1
         OR COALESCE(c.trade_name, '') ILIKE $1
+        OR regexp_replace(
+             lower(
+               translate(
+                 COALESCE(c.legal_name, ''),
+                 'ÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇáàãâäéèêëíìîïóòõôöúùûüç',
+                 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'
+               )
+             ),
+             '[^a-z0-9]+',
+             '',
+             'g'
+           ) LIKE $3
+        OR regexp_replace(
+             lower(
+               translate(
+                 COALESCE(c.trade_name, ''),
+                 'ÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇáàãâäéèêëíìîïóòõôöúùûüç',
+                 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'
+               )
+             ),
+             '[^a-z0-9]+',
+             '',
+             'g'
+           ) LIKE $3
      GROUP BY
        c.id,
        c.legal_name,
