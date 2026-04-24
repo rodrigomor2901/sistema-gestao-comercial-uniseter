@@ -1004,10 +1004,34 @@ function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const CANONICAL_SERVICE_LABELS = {
+  vigilancia: "Vigilancia",
+  seguranca: "Vigilancia",
+  portaria: "Portaria",
+  limpeza: "Limpeza",
+  jardinagem: "Jardinagem",
+  monitoramento: "Monitoramento",
+  bombeiro: "Bombeiro",
+  manutencao: "Manutencao",
+  zeladoria: "Zeladoria",
+  zeladora: "Zeladoria",
+  orientador_de_transito: "Orientador de Transito",
+  motorista: "Motorista",
+  logistica: "Logistica"
+};
+
 function normalizeServiceLabel(value) {
   const text = String(value || "").trim();
   if (!text) return "";
-  if (text.toLowerCase() === "seguranca") return "Vigilancia";
+  const canonical = CANONICAL_SERVICE_LABELS[
+    String(text)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+  ];
+  if (canonical) return canonical;
   return text;
 }
 
