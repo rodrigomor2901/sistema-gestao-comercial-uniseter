@@ -3482,6 +3482,143 @@ function validateRequestPayload(payload) {
   return missing;
 }
 
+async function dedupeRequestStructureRecordsForRequest(client, requestId) {
+  await client.query(
+    `DELETE FROM request_services current_row
+     USING request_services duplicate_row
+     WHERE current_row.id > duplicate_row.id
+       AND current_row.request_id = $1
+       AND duplicate_row.request_id = $1
+       AND current_row.request_id = duplicate_row.request_id
+       AND current_row.service_type IS NOT DISTINCT FROM duplicate_row.service_type`,
+    [requestId]
+  );
+
+  await client.query(
+    `DELETE FROM request_benefits current_row
+     USING request_benefits duplicate_row
+     WHERE current_row.id > duplicate_row.id
+       AND current_row.request_id = $1
+       AND duplicate_row.request_id = $1
+       AND current_row.request_id = duplicate_row.request_id
+       AND current_row.benefit_type IS NOT DISTINCT FROM duplicate_row.benefit_type
+       AND current_row.option_label IS NOT DISTINCT FROM duplicate_row.option_label
+       AND current_row.region_value IS NOT DISTINCT FROM duplicate_row.region_value
+       AND current_row.notes IS NOT DISTINCT FROM duplicate_row.notes`,
+    [requestId]
+  );
+
+  await client.query(
+    `WITH ranked_posts AS (
+       SELECT
+         id,
+         ROW_NUMBER() OVER (
+           PARTITION BY
+             request_id,
+             post_type,
+             qty_posts,
+             qty_workers,
+             function_name,
+             work_scale,
+             start_time,
+             end_time,
+             saturday_time,
+             saturday_end_time,
+             holiday_flag
+           ORDER BY
+             (
+               CASE WHEN additional_type IS NOT NULL AND additional_type <> '' THEN 1 ELSE 0 END +
+               CASE WHEN gratification_percentage IS NOT NULL THEN 1 ELSE 0 END +
+               CASE WHEN indemnified_flag IS NOT NULL THEN 1 ELSE 0 END +
+               CASE WHEN uniform_text IS NOT NULL AND uniform_text <> '' THEN 1 ELSE 0 END +
+               CASE WHEN cost_allowance_value IS NOT NULL THEN 1 ELSE 0 END
+             ) DESC,
+             id ASC
+         ) AS row_rank
+       FROM request_posts
+       WHERE request_id = $1
+     )
+     DELETE FROM request_posts
+     WHERE id IN (
+       SELECT id
+       FROM ranked_posts
+       WHERE row_rank > 1
+     )`,
+    [requestId]
+  );
+
+  await client.query(
+    `DELETE FROM request_equipments current_row
+     USING request_equipments duplicate_row
+     WHERE current_row.id > duplicate_row.id
+       AND current_row.request_id = $1
+       AND duplicate_row.request_id = $1
+       AND current_row.request_id = duplicate_row.request_id
+       AND current_row.category IS NOT DISTINCT FROM duplicate_row.category
+       AND current_row.equipment_name IS NOT DISTINCT FROM duplicate_row.equipment_name
+       AND current_row.quantity IS NOT DISTINCT FROM duplicate_row.quantity
+       AND current_row.notes IS NOT DISTINCT FROM duplicate_row.notes`,
+    [requestId]
+  );
+}
+
+function buildRequestPostResponseCoreKey(item = {}) {
+  return [
+    normalizedStructureKey(item.postType),
+    normalizedStructureKey(item.qtyPosts),
+    normalizedStructureKey(item.qtyWorkers),
+    normalizedStructureKey(item.functionName),
+    normalizedStructureKey(item.workScale),
+    normalizedStructureKey(item.startTime),
+    normalizedStructureKey(item.endTime),
+    normalizedStructureKey(item.saturdayTime),
+    normalizedStructureKey(item.saturdayEndTime),
+    normalizedStructureKey(item.holidayFlag)
+  ].join("|");
+}
+
+function normalizeRequestPostResponseRows(rows = []) {
+  const merged = new Map();
+  for (const row of rows) {
+    const normalizedRow = {
+      ...row,
+      postType: normalizeServiceLabel(row.postType || ""),
+      holidayFlag: row.holidayFlag || "",
+      indemnifiedFlag: row.indemnifiedFlag === true ? "Sim" : row.indemnifiedFlag === false ? "Nao" : (row.indemnifiedFlag || ""),
+      gratificationPercentage: row.gratificationPercentage ?? "",
+      costAllowanceValue: row.costAllowanceValue ?? ""
+    };
+    const key = buildRequestPostResponseCoreKey(normalizedRow);
+    if (!key) continue;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, normalizedRow);
+      continue;
+    }
+    merged.set(key, {
+      ...current,
+      additionalType: mergeStructureValue(current.additionalType, normalizedRow.additionalType),
+      gratificationPercentage: mergeStructureValue(current.gratificationPercentage, normalizedRow.gratificationPercentage),
+      indemnifiedFlag: mergeStructureValue(current.indemnifiedFlag, normalizedRow.indemnifiedFlag),
+      uniformText: mergeStructureValue(current.uniformText, normalizedRow.uniformText),
+      costAllowanceValue: mergeStructureValue(current.costAllowanceValue, normalizedRow.costAllowanceValue)
+    });
+  }
+  return [...merged.values()];
+}
+
+function normalizeRequestEquipmentResponseRows(rows = []) {
+  return dedupeByKey(rows.map((row) => ({
+    ...row,
+    category: normalizeServiceLabel(row.category || "")
+  })), (item) => [
+    normalizedStructureKey(item.category),
+    normalizedStructureKey(item.equipmentName),
+    normalizedStructureKey(item.quantity),
+    normalizedStructureKey(item.notes)
+  ].join("|"));
+}
+
 async function replaceClientContacts(client, clientId, payload) {
   await client.query("DELETE FROM client_contacts WHERE client_id = $1", [clientId]);
 
@@ -3865,6 +4002,8 @@ async function replaceRequestStructure(client, requestId, payload) {
       ]
     );
   }
+
+  await dedupeRequestStructureRecordsForRequest(client, requestId);
 }
 
 async function createRequest(payload, session) {
@@ -5883,8 +6022,8 @@ async function getRequestDetailFromDb(requestId, session) {
     pendingInfo: pendingInfoResult.rows[0] || null,
     services: servicesResult.rows,
     benefits: benefitsResult.rows,
-    posts: postsResult.rows,
-    equipments: equipmentsResult.rows,
+    posts: normalizeRequestPostResponseRows(postsResult.rows),
+    equipments: normalizeRequestEquipmentResponseRows(equipmentsResult.rows),
     revisionHistory: negotiationValueHistory,
     history: [...historyResult.rows.map((row) => ({
       title: row.title,
