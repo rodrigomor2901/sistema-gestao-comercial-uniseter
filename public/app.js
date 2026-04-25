@@ -360,6 +360,7 @@ let proposalNumberSaveInFlight = false;
 let proposalSaveInFlight = false;
 let commercialSaveInFlight = false;
 let contractSaveInFlight = false;
+let browserNotificationPermissionRequested = localStorage.getItem("crmBrowserNotificationPermissionRequested") === "true";
 let lookupsCache = {
   branches: [],
   responsibles: [],
@@ -386,6 +387,7 @@ const PROPOSAL_SERVICE_TYPES = [
 ];
 let authToken = localStorage.getItem("crmAuthToken") || "";
 let listenersInitialized = false;
+const BROWSER_NOTIFICATION_STORAGE_KEY = "crmBrowserNotificationPermissionRequested";
 const activeModuleStage = Object.fromEntries(
   Object.entries(MODULE_STAGE_CONFIG).map(([key, stages]) => [key, stages[0].code])
 );
@@ -3101,6 +3103,7 @@ function setupRequestForm() {
 
       authToken = result.token;
       localStorage.setItem("crmAuthToken", authToken);
+      await requestBrowserNotificationPermission();
       document.getElementById("login-form").reset();
       await loadAuthenticatedAppData();
     } catch (error) {
@@ -3450,6 +3453,62 @@ function setNotificationsPanelOpen(isOpen) {
   panel.hidden = !notificationsPanelOpen;
 }
 
+function canUseBrowserNotifications() {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+function markBrowserNotificationPromptHandled() {
+  browserNotificationPermissionRequested = true;
+  localStorage.setItem(BROWSER_NOTIFICATION_STORAGE_KEY, "true");
+}
+
+async function requestBrowserNotificationPermission({ force = false } = {}) {
+  if (!canUseBrowserNotifications()) return "unsupported";
+
+  if (Notification.permission === "granted") {
+    markBrowserNotificationPromptHandled();
+    return "granted";
+  }
+
+  if (Notification.permission === "denied") {
+    markBrowserNotificationPromptHandled();
+    return "denied";
+  }
+
+  if (browserNotificationPermissionRequested && !force) {
+    return Notification.permission;
+  }
+
+  markBrowserNotificationPromptHandled();
+  try {
+    return await Notification.requestPermission();
+  } catch (error) {
+    console.warn("Nao foi possivel solicitar permissao para notificacoes do navegador.", error);
+    return "error";
+  }
+}
+
+function showBrowserNotification(item) {
+  if (!canUseBrowserNotifications() || Notification.permission !== "granted" || !item?.id) {
+    return;
+  }
+
+  try {
+    const notification = new Notification(item.title || "Atualizacao de status", {
+      body: item.message || "",
+      tag: `crm-notification-${item.id}`,
+      requireInteraction: false
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  } catch (error) {
+    console.warn("Nao foi possivel exibir a notificacao do navegador.", error);
+  }
+}
+
 function showNotificationToast(item) {
   const stack = document.getElementById("notification-toast-stack");
   if (!stack || !item?.id) return;
@@ -3479,6 +3538,7 @@ async function loadNotifications({ silent = false } = {}) {
       .forEach((item) => {
         notificationToastSeenIds.add(String(item.id));
         showNotificationToast(item);
+        showBrowserNotification(item);
       });
   } else {
     notificationsCache.forEach((item) => notificationToastSeenIds.add(String(item.id)));
@@ -3623,6 +3683,9 @@ function startRealtimeSync() {
 
   source.addEventListener("crm-data-updated", () => {
     scheduleRealtimeRefresh();
+    loadNotifications({ silent: true }).catch((error) => {
+      console.warn("Nao foi possivel sincronizar as notificacoes em tempo real.", error);
+    });
   });
 
   source.onerror = () => {
@@ -3901,6 +3964,7 @@ async function bootstrap() {
     setNotificationsPanelOpen(nextState);
     if (nextState && authToken) {
       try {
+        await requestBrowserNotificationPermission({ force: true });
         await loadNotifications();
       } catch (error) {
         console.warn("Nao foi possivel carregar as notificacoes.", error);
