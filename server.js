@@ -3914,7 +3914,7 @@ async function listClientMatches(term, session) {
     session?.email || null,
     normalizedLooseTerm ? `%${normalizedLooseTerm}%` : ""
   ];
-  const result = await query(
+  const clientResult = await query(
     `SELECT
        c.id,
        UPPER(c.legal_name) AS "legalName",
@@ -3938,7 +3938,8 @@ async function listClientMatches(term, session) {
          STRING_AGG(DISTINCT seller_user.name, ', ' ORDER BY seller_user.name)
            FILTER (WHERE seller_user.name IS NOT NULL),
          ''
-       ) AS "sellerNames"
+       ) AS "sellerNames",
+       'client'::text AS "sourceType"
      FROM clients c
      LEFT JOIN requests r ON r.client_id = c.id
      LEFT JOIN users seller_user ON seller_user.id = r.seller_user_id
@@ -3997,7 +3998,69 @@ async function listClientMatches(term, session) {
     values
   );
 
-  return result.rows.map((row) => {
+  const proposalHistoryResult = await query(
+    `SELECT
+       NULL::bigint AS id,
+       UPPER(pr.client_name) AS "legalName",
+       ''::text AS "tradeName",
+       NULL::text AS cnpj,
+       NULL::text AS "mainEmail",
+       NULL::text AS address,
+       NULL::text AS "addressNumber",
+       NULL::text AS "addressComplement",
+       NULL::text AS district,
+       NULL::text AS city,
+       NULL::text AS state,
+       NULL::text AS "zipCode",
+       NULL::text AS "primaryContactName",
+       NULL::text AS "primaryContactRole",
+       NULL::text AS "primaryContactEmail",
+       NULL::text AS "primaryContactPhone",
+       COUNT(pr.id)::int AS "requestCount",
+       COUNT(pr.id) FILTER (WHERE LOWER(COALESCE(seller_user.email, '')) = LOWER(COALESCE($2, '')))::int AS "ownRequestCount",
+       COALESCE(
+         STRING_AGG(DISTINCT COALESCE(seller_user.name, pr.manager_name), ', ' ORDER BY COALESCE(seller_user.name, pr.manager_name))
+           FILTER (WHERE COALESCE(seller_user.name, pr.manager_name) IS NOT NULL),
+         ''
+       ) AS "sellerNames",
+       'proposal_history'::text AS "sourceType"
+     FROM proposal_registry pr
+     LEFT JOIN users seller_user ON seller_user.id = pr.seller_user_id
+     WHERE COALESCE(pr.client_name, '') <> ''
+       AND (
+         pr.client_name ILIKE $1
+         OR regexp_replace(
+              lower(
+                translate(
+                  COALESCE(pr.client_name, ''),
+                  'ÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇáàãâäéèêëíìîïóòõôöúùûüç',
+                  'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'
+                )
+              ),
+              '[^a-z0-9]+',
+              '',
+              'g'
+            ) LIKE $3
+       )
+     GROUP BY UPPER(pr.client_name)
+     ORDER BY COUNT(pr.id) DESC, UPPER(pr.client_name) ASC
+     LIMIT 8`,
+    values
+  );
+
+  const mergedMatches = new Map();
+  [...clientResult.rows, ...proposalHistoryResult.rows].forEach((row) => {
+    const key = String(row.legalName || row.tradeName || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "")
+      .toUpperCase();
+    if (!key) return;
+    if (mergedMatches.has(key) && row.sourceType !== "client") return;
+    mergedMatches.set(key, row);
+  });
+
+  return [...mergedMatches.values()].map((row) => {
     const sellerNames = String(row.sellerNames || "")
       .split(",")
       .map((item) => item.trim())
@@ -4012,6 +4075,12 @@ async function listClientMatches(term, session) {
       warningMessage = `O vendedor ${sellerNames[0]} já tem negócio com este cliente.`;
     } else if (sellerNames.length > 1) {
       warningMessage = `Já existem negócios com este cliente: ${sellerNames.join(", ")}.`;
+    }
+
+    if (row.sourceType === "proposal_history" && !row.id) {
+      warningMessage = warningMessage
+        ? `${warningMessage} Histórico comercial encontrado na base importada.`
+        : "Histórico comercial encontrado na base importada.";
     }
 
     return {
